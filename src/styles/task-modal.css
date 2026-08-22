@@ -35,6 +35,11 @@
   animation: slideUp 0.2s ease-out;
 }
 
+/* 弹窗宽度修饰类（替代内联 style） */
+.ct-modal--log { max-width: 400px; }        /* 添加日志 */
+.ct-modal--export { max-width: 440px; }     /* 导出日志 */
+.ct-modal--terminate { max-width: 420px; }  /* 终止任务 */
+
 @keyframes slideUp {
   from { transform: translateY(20px); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
@@ -86,6 +91,36 @@
 .ct-label {
   font-size: 13px;
   font-weight: 500;
+  color: var(--text-secondary);
+}
+/* 必填标记与行内校验错误 */
+.ct-required { color: var(--status-error-default); }
+.ct-field-error {
+  min-height: 16px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--status-error-default);
+}
+/* 截止日期字段（未勾选"设置截止日期"时隐藏） */
+.ct-field--deadline { display: none; margin-top: 12px; }
+/* 终止弹窗：任务名称展示块 */
+.tm-task-name {
+  padding: 8px 12px;
+  background: var(--bg-overlay-l1);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+/* 编辑弹窗面包屑徽标 */
+.et-crumb-badge { font-size: 12px; }
+.et-crumb-badge--done { color: var(--status-success-default); font-weight: 500; }
+.et-crumb-badge--terminated { color: #c0392b; font-weight: 400; }
+/* 截止日期行图标 */
+.et-deadline-display__icon {
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+  margin-right: 4px;
   color: var(--text-secondary);
 }
 .ct-input {

@@ -1,0 +1,118 @@
+/* dialog.css — 自定义确认/提示弹窗（dialog.js 专用，自包含不依赖其他页面样式）
+   主窗口与悬浮窗（float.html）共用 */
+
+.dlg-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(16, 24, 40, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+}
+
+.dlg-modal {
+  width: 100%;
+  max-width: 400px;
+  background: var(--bg-base-default, #ffffff);
+  border-radius: 12px;
+  box-shadow: 0 20px 48px rgba(16, 24, 40, 0.18);
+  overflow: hidden;
+  animation: dlg-in 0.18s ease;
+}
+
+@keyframes dlg-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.dlg-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px 0;
+}
+
+.dlg-modal__title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-default, #171717);
+}
+
+.dlg-modal__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-tertiary, #98a2b3);
+  cursor: pointer;
+  padding: 0;
+}
+.dlg-modal__close:hover { background: var(--bg-overlay-l1, #f2f4f7); color: var(--text-default, #171717); }
+.dlg-modal__close svg { width: 14px; height: 14px; }
+
+.dlg-modal__body {
+  padding: 14px 18px 18px;
+}
+
+.dlg-modal__message {
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--text-secondary, #475467);
+  white-space: pre-line;
+  word-break: break-word;
+}
+
+.dlg-modal__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 0 18px 16px;
+}
+
+.dlg-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  padding: 0 16px;
+  border-radius: 6px;
+  border: none;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, opacity 0.15s;
+}
+.dlg-btn--cancel {
+  background: var(--bg-overlay-l2, #eaecf0);
+  color: var(--text-secondary, #475467);
+}
+.dlg-btn--cancel:hover { background: var(--bg-overlay-l1, #f2f4f7); }
+.dlg-btn--primary {
+  background: var(--bg-brand, #4b3fe3);
+  color: #ffffff;
+}
+.dlg-btn--primary:hover { background: var(--bg-brand-hover, #635bff); }
+.dlg-btn--danger {
+  background: var(--status-error-default, #e8463a);
+  color: #ffffff;
+}
+.dlg-btn--danger:hover { opacity: 0.9; }
+
+.dlg-btn:focus-visible,
+.dlg-modal__close:focus-visible {
+  outline: 2px solid var(--bg-brand, #4b3fe3);
+  outline-offset: 2px;
+}
+
+/* 减弱动态效果（系统级无障碍设置） */
+@media (prefers-reduced-motion: reduce) {
+  .dlg-modal { animation: none; }
+}

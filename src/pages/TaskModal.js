@@ -3,9 +3,15 @@
 
 import { store } from '../store.js';
 import { icons } from '../utils/icons.js';
+import { confirmDialog } from '../utils/dialog.js';
 import {
   formatShortDate, daysBetween, toISODate, fromISODate, formatRelativeTime,
 } from '../utils/date.js';
+
+// 是否存在叠加的上层弹窗（终止确认/确认对话框等），Esc 时交由上层处理
+function hasUpperModal() {
+  return document.querySelectorAll('.modal-backdrop, .dlg-backdrop').length > 1;
+}
 
 // ─── 创建任务弹窗 ─────────────────────────────────────────
 export function openCreateModal(onClose) {
@@ -16,26 +22,26 @@ export function openCreateModal(onClose) {
 
   const modal = document.createElement('div');
   modal.className = 'ct-modal';
-  modal.addEventListener('click', (e) => e.stopPropagation());
   modal.innerHTML = `
     <div class="ct-modal__header">
       <div class="ct-modal__title">创建任务</div>
-      <button class="ct-modal__close" id="ct-close">${icons.close}</button>
+      <button class="ct-modal__close" id="ct-close" title="关闭" aria-label="关闭">${icons.close}</button>
     </div>
     <div class="ct-modal__body">
       <form class="ct-form" id="ct-form">
         <div class="ct-field">
-          <label class="ct-label">任务名称 <span style="color:var(--status-error-default)">*</span></label>
+          <label class="ct-label" for="ct-name">任务名称 <span class="ct-required">*</span></label>
           <div class="ct-input">
             <input type="text" id="ct-name" placeholder="输入任务名称..." maxlength="80" />
           </div>
+          <div class="ct-field-error" id="ct-name-error"></div>
         </div>
         <div class="ct-field">
-          <label class="ct-label">任务描述</label>
+          <label class="ct-label" for="ct-desc">任务描述</label>
           <textarea class="ct-textarea" id="ct-desc" placeholder="添加任务描述（可选）..." maxlength="200"></textarea>
         </div>
         <div class="ct-field">
-          <label class="ct-label">优先级</label>
+          <label class="ct-label" for="ct-priority">优先级</label>
           <div class="ct-select-wrap">
             <select class="ct-select" id="ct-priority">
               <option value="high">高</option>
@@ -52,15 +58,15 @@ export function openCreateModal(onClose) {
             <span>设置截止日期</span>
           </label>
         </div>
-        <div class="ct-field" id="ct-deadline-field" style="display: none; margin-top: 12px;">
-          <label class="ct-label">截止日期</label>
+        <div class="ct-field ct-field--deadline" id="ct-deadline-field">
+          <label class="ct-label" for="ct-deadline">截止日期</label>
           <div class="ct-date-wrap">
             <input type="date" class="ct-input" id="ct-deadline" />
           </div>
         </div>
       </form>
     </div>
-    <div class="ct-modal__footer" style="justify-content: flex-end; gap: 8px;">
+    <div class="ct-modal__footer">
       <button class="ct-btn ct-btn--cancel" id="ct-cancel">取消</button>
       <button class="ct-btn ct-btn--primary" id="ct-submit">创建</button>
     </div>
@@ -76,7 +82,7 @@ export function openCreateModal(onClose) {
 
   const deadlineField = modal.querySelector('#ct-deadline-field');
   modal.querySelector('#ct-has-deadline').addEventListener('change', (e) => {
-    deadlineField.style.display = e.target.checked ? 'block' : 'none';
+    deadlineField.classList.toggle('ct-field--deadline', !e.target.checked);
   });
 
   const onKey = (e) => { if (e.key === 'Escape') close(); };
@@ -95,15 +101,20 @@ export function openCreateModal(onClose) {
   const ctCancel = modal.querySelector('#ct-cancel');
   if (ctClose) ctClose.addEventListener('click', (e) => { e.stopPropagation(); close(); });
   if (ctCancel) ctCancel.addEventListener('click', (e) => { e.stopPropagation(); close(); });
-  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
 
   // 阻止表单默认提交（Enter 键），改由下方按钮点击处理
   modal.querySelector('#ct-form').addEventListener('submit', (e) => e.preventDefault());
 
+  const $name = modal.querySelector('#ct-name');
+  const $nameError = modal.querySelector('#ct-name-error');
+  $name.addEventListener('input', () => { $nameError.textContent = ''; });
+
   modal.querySelector('#ct-submit').addEventListener('click', () => {
-    const name = modal.querySelector('#ct-name').value.trim();
+    const name = $name.value.trim();
     if (!name) {
-      modal.querySelector('#ct-name').focus();
+      // 行内错误提示，替代静默 focus
+      $nameError.textContent = '请输入任务名称';
+      $name.focus();
       return;
     }
     const hasDeadline = modal.querySelector('#ct-has-deadline').checked;
@@ -149,12 +160,13 @@ export function openEditModal(taskId, onClose) {
       <div class="et-modal__breadcrumb">
         <span class="crumb-muted">我的任务</span>
         <span class="crumb-muted">/</span>
-        <span class="crumb-current">${isReadOnly ? '查看任务' : '编辑任务'}${isDone ? ' <span style="color:var(--status-success-default);font-size:12px;font-weight:500;">（已完成）</span>' : ''}${isTerminated ? ' <span style="color:#c0392b;font-size:12px;font-weight:normal;">（已终止）</span>' : ''}</span>
+        <span class="crumb-current">${isReadOnly ? '查看任务' : '编辑任务'}${isDone ? ' <span class="et-crumb-badge et-crumb-badge--done">（已完成）</span>' : ''}${isTerminated ? ' <span class="et-crumb-badge et-crumb-badge--terminated">（已终止）</span>' : ''}</span>
       </div>
-      <button class="ct-modal__close" id="et-close" title="关闭">${icons.close}</button>
+      <button class="ct-modal__close" id="et-close" title="关闭" aria-label="关闭">${icons.close}</button>
     </div>
     <div class="et-modal__body">
-      <input type="text" class="et-task-name-input ${isDone ? 'is-done' : ''} ${isTerminated ? 'is-terminated' : ''}" id="et-name" value="${escapeAttr(task.name)}" placeholder="任务名称" ${isReadOnly ? 'disabled' : ''} />
+      <input type="text" class="et-task-name-input ${isDone ? 'is-done' : ''} ${isTerminated ? 'is-terminated' : ''}" id="et-name" value="${escapeAttr(task.name)}" placeholder="任务名称" aria-label="任务名称" ${isReadOnly ? 'disabled' : ''} />
+      <div class="ct-field-error" id="et-name-error"></div>
       <div class="et-columns">
         <div class="et-col-left">
           <div class="et-section">
@@ -193,8 +205,8 @@ export function openEditModal(taskId, onClose) {
               <div class="et-info-row">
                 <span class="et-info-label">截止日期</span>
                 <div class="et-deadline-display" id="et-deadline-display">
-                  <span style="display:inline-flex;width:14px;height:14px;margin-right:4px;color:var(--text-secondary);">${icons.calendar}</span>
-                  <input type="date" id="et-deadline-input" value="${task.deadline}" class="et-deadline-input-inline" ${isReadOnly ? 'disabled' : ''} />
+                  <span class="et-deadline-display__icon">${icons.calendar}</span>
+                  <input type="date" id="et-deadline-input" value="${task.deadline}" class="et-deadline-input-inline" aria-label="截止日期" ${isReadOnly ? 'disabled' : ''} />
                 </div>
               </div>
             </div>
@@ -236,7 +248,7 @@ export function openEditModal(taskId, onClose) {
       return `
         <div class="et-subtask-row ${isSubDone ? 'et-subtask-row--checked' : ''} ${isSubTerminated ? 'et-subtask-row--terminated' : ''}" data-subtask-id="${s.id}">
           <label class="et-subtask-check">
-            <input type="checkbox" ${s.done ? 'checked' : ''} ${(isReadOnly || s.done) ? 'disabled' : ''} data-st-toggle="${s.id}" />
+            <input type="checkbox" ${s.done ? 'checked' : ''} ${(isReadOnly || s.done || isSubTerminated) ? 'disabled' : ''} data-st-toggle="${s.id}" />
             <span class="et-subtask-check__box">${icons.check}</span>
           </label>
           <input type="text" class="et-subtask-input" value="${escapeAttr(s.name)}" ${isReadOnly ? 'disabled' : ''} data-st-edit="${s.id}" />
@@ -246,10 +258,18 @@ export function openEditModal(taskId, onClose) {
 
     if (!isReadOnly) {
       subtaskListEl.querySelectorAll('[data-st-toggle]').forEach((cb) => {
-        cb.addEventListener('change', () => {
-          if (cb.checked && !confirm('确认将此子任务标记为已完成？')) {
-            cb.checked = false;
-            return;
+        cb.addEventListener('change', async () => {
+          if (cb.checked) {
+            // 自定义确认弹窗替代原生 confirm
+            const ok = await confirmDialog({
+              title: '完成子任务',
+              message: '确认将此子任务标记为已完成？',
+              confirmText: '确认完成',
+            });
+            if (!ok) {
+              cb.checked = false;
+              return;
+            }
           }
           commitSubtaskNames();
           store.updateSubtask(taskId, cb.dataset.stToggle, { done: cb.checked });
@@ -265,6 +285,8 @@ export function openEditModal(taskId, onClose) {
     subtaskListEl.querySelectorAll('[data-st-edit]').forEach((input) => {
       const id = input.dataset.stEdit;
       const value = input.value.trim();
+      // 空名称不落库（避免产生空名子任务）
+      if (!value) return;
       const st = fresh.subtasks.find((s) => s.id === id);
       if (st && st.name !== value) {
         store.updateSubtask(taskId, id, { name: value });
@@ -315,7 +337,12 @@ export function openEditModal(taskId, onClose) {
 
   // ─── 关闭逻辑 ────────────────────────────────────────
   let unsub = null;
-  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  const onKey = (e) => {
+    if (e.key !== 'Escape') return;
+    // 存在叠加的上层弹窗（终止确认/完成子任务确认）时，Esc 只关上层
+    if (hasUpperModal()) return;
+    close();
+  };
   document.addEventListener('keydown', onKey);
 
   function close() {
@@ -334,17 +361,22 @@ export function openEditModal(taskId, onClose) {
   const etCancel = modal.querySelector('#et-cancel');
   if (etClose) etClose.addEventListener('click', (e) => { e.stopPropagation(); close(); });
   if (etCancel) etCancel.addEventListener('click', (e) => { e.stopPropagation(); close(); });
-  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
 
   if (!isReadOnly) {
     modal.querySelector('#et-delete').addEventListener('click', () => {
       openTerminateModal(task, taskId, close);
     });
 
+    const $etName = modal.querySelector('#et-name');
+    const $etNameError = modal.querySelector('#et-name-error');
+    $etName.addEventListener('input', () => { $etNameError.textContent = ''; });
+
     modal.querySelector('#et-save').addEventListener('click', () => {
-      const name = modal.querySelector('#et-name').value.trim();
+      const name = $etName.value.trim();
       if (!name) {
-        modal.querySelector('#et-name').focus();
+        // 行内错误提示，替代静默 focus
+        $etNameError.textContent = '请输入任务名称';
+        $etName.focus();
         return;
       }
       commitSubtaskNames();
@@ -375,25 +407,25 @@ function openTerminateModal(task, taskId, parentClose) {
   backdrop.className = 'modal-backdrop';
 
   const modal = document.createElement('div');
-  modal.className = 'ct-modal';
-  modal.style.maxWidth = '420px';
+  modal.className = 'ct-modal ct-modal--terminate';
 
   modal.innerHTML = `
     <div class="ct-modal__header">
       <div class="ct-modal__title">终止任务</div>
-      <button class="ct-modal__close" id="tm-close">${icons.close}</button>
+      <button class="ct-modal__close" id="tm-close" title="关闭" aria-label="关闭">${icons.close}</button>
     </div>
     <div class="ct-modal__body">
       <div class="ct-field">
         <label class="ct-label">任务名称</label>
-        <div style="padding:8px 12px;background:var(--bg-overlay-l1);border-radius:6px;font-size:13px;color:var(--text-secondary);">${escapeHtml(task.name)}</div>
+        <div class="tm-task-name">${escapeHtml(task.name)}</div>
       </div>
       <div class="ct-field">
-        <label class="ct-label">终止原因 <span style="color:var(--status-error-default)">*</span></label>
-        <textarea id="tm-reason" class="ct-textarea" placeholder="请输入终止原因（必填，200字以内）..." maxlength="200" style="width:100%;height:100px;resize:none;padding:8px 12px;border:1px solid var(--border-neutral-l1);border-radius:6px;font-size:13px;color:var(--text-default);background:var(--bg-base-default);outline:none;font-family:inherit;"></textarea>
+        <label class="ct-label" for="tm-reason">终止原因 <span class="ct-required">*</span></label>
+        <textarea id="tm-reason" class="ct-textarea" placeholder="请输入终止原因（必填，200字以内）..." maxlength="200"></textarea>
+        <div class="ct-field-error" id="tm-reason-error"></div>
       </div>
     </div>
-    <div class="ct-modal__footer" style="justify-content: flex-end; gap: 8px;">
+    <div class="ct-modal__footer">
       <button class="et-btn et-btn--cancel" id="tm-cancel">取消</button>
       <button class="et-btn et-btn--danger" id="tm-confirm">确认终止</button>
     </div>
@@ -402,16 +434,27 @@ function openTerminateModal(task, taskId, parentClose) {
   backdrop.appendChild(modal);
   document.body.appendChild(backdrop);
 
-  const close = () => backdrop.remove();
+  const close = () => {
+    document.removeEventListener('keydown', onKey);
+    backdrop.remove();
+  };
+  // Escape 关闭（与其他弹窗行为一致）
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey);
 
   modal.querySelector('#tm-close').addEventListener('click', close);
   modal.querySelector('#tm-cancel').addEventListener('click', close);
-  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+
+  const $reason = modal.querySelector('#tm-reason');
+  const $reasonError = modal.querySelector('#tm-reason-error');
+  $reason.addEventListener('input', () => { $reasonError.textContent = ''; });
 
   modal.querySelector('#tm-confirm').addEventListener('click', () => {
-    const reason = modal.querySelector('#tm-reason').value.trim();
+    const reason = $reason.value.trim();
     if (!reason) {
-      modal.querySelector('#tm-reason').focus();
+      // 行内错误提示，替代静默 focus
+      $reasonError.textContent = '请输入终止原因';
+      $reason.focus();
       return;
     }
     store.terminateTask(taskId, reason);
@@ -419,7 +462,7 @@ function openTerminateModal(task, taskId, parentClose) {
     parentClose();
   });
 
-  setTimeout(() => modal.querySelector('#tm-reason').focus(), 100);
+  setTimeout(() => $reason.focus(), 100);
 }
 
 // ─── HTML 转义 ────────────────────────────────────────────

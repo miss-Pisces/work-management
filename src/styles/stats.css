@@ -46,9 +46,11 @@
   color: var(--text-default);
   background: var(--bg-overlay-l1);
 }
-.stats-range-pill--active {
-  background: var(--bg-brand) !important;
-  color: #ffffff !important;
+/* 选中态含 :hover（置于 :hover 规则之后，同特异性靠顺序取胜，替代原 !important） */
+.stats-range-pill--active,
+.stats-range-pill--active:hover {
+  background: var(--bg-brand);
+  color: #ffffff;
 }
 
 /* ===== Custom Date Picker ===== */
@@ -83,10 +85,36 @@
   padding: 0 4px;
 }
 
+/* 自定义范围校验提示：错误态红字，操作引导灰字 */
+.stats-custom-date__hint {
+  font-size: 14px;
+  color: var(--status-error-default);
+  white-space: nowrap;
+}
+.stats-custom-date__hint--muted {
+  color: var(--text-tertiary);
+}
+/* 草稿无效时禁用「应用」 */
+.stats-custom-date .wf-btn--secondary:disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* 自定义范围未应用时的 KPI 占位（避免静默回退到全量数据） */
+.stats-kpi-empty {
+  background: var(--bg-base-default);
+  border: 1px dashed var(--border-neutral-l1);
+  border-radius: 8px;
+  padding: 32px 20px;
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: 15px;
+}
+
 /* ===== KPI Cards ===== */
 .stats-kpi-row {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 16px;
   flex-shrink: 0;
 }
@@ -114,7 +142,8 @@ button.stats-kpi-card--clickable:hover {
 }
 button.stats-kpi-card--clickable:focus-visible,
 button.stats-overdue-card:focus-visible,
-button.cmb-legend-item:focus-visible {
+button.cmb-legend-item:focus-visible,
+.stats-range-pill:focus-visible {
   outline: 2px solid var(--bg-brand);
   outline-offset: 2px;
 }
@@ -137,6 +166,18 @@ button.cmb-legend-item:focus-visible {
   color: var(--status-error-default); /* 终止数 */
 }
 
+/* 子任务卡「12/24」分数显示：分子大、分母小且弱化 */
+.stats-kpi__metric--subtask {
+  align-items: baseline;
+  gap: 2px;
+}
+.stats-kpi__frac-den {
+  font-size: 26px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
 /* 标签位于卡片左上角，样式与图表卡标题一致 */
 .stats-kpi__label {
   display: block;
@@ -146,10 +187,10 @@ button.cmb-legend-item:focus-visible {
   margin-bottom: 4px;
 }
 
-/* ===== Hero Row（第一排：逾期警示卡 + 任务完成率）===== */
+/* ===== Hero Row（第一排：逾期警示卡 + 任务完成率 + 本月工作状态）===== */
 .stats-hero-row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 16px;
   flex-shrink: 0;
 }
@@ -206,7 +247,7 @@ button.stats-overdue-card:hover {
   align-items: center;
   justify-content: center;
   font-family: var(--font-family-metric);
-  font-size: 63px;
+  font-size: 76px;
   font-weight: 700;
   line-height: 1.1;
   font-variant-numeric: tabular-nums;
@@ -216,12 +257,44 @@ button.stats-overdue-card:hover {
 .stats-overdue-card__hint {
   display: block;
   text-align: center;
-  font-size: 15px;
+  font-size: 16.2px;
   color: var(--text-tertiary);
 }
 /* 警示/安心态提示语用深色，保证白底对比度且强化语义 */
 .stats-overdue-card.is-danger .stats-overdue-card__hint { color: #b42318; }
 .stats-overdue-card.is-success .stats-overdue-card__hint { color: #065f46; }
+/* 本月工作状态卡：图标浅绿点缀；正文为两排 工作/躺平（统计口径见卡片 title） */
+.stats-overdue-card.is-action .stats-overdue-card__icon { color: var(--viz-action-day); }
+.stats-monthly-rows {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-evenly;
+}
+.stats-monthly-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 10px;
+}
+/* 工作：文字 = 已完成蓝，数字 = 进行中浅蓝（与完成率环形图同色系）；
+   文字字号/字重与逾期卡提示语一致 */
+.stats-monthly-row__label {
+  font-size: 16.2px;
+  font-weight: 400;
+  color: var(--viz-series-sky);
+}
+.stats-monthly-row__num {
+  font-family: var(--font-family-metric);
+  font-size: 76px;
+  font-weight: 700;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.stats-monthly-row__num--work { color: var(--viz-series-sky-deep); }
+/* 躺平：文字 = 卡片标签色，数字 = 逾期警示红（与逾期卡同色系） */
+.stats-monthly-row__label--idle { color: var(--text-default); }
+.stats-monthly-row__num--idle { color: var(--status-error-default); }
 
 /* ===== 分区分隔线 ===== */
 .stats-section-divider {
@@ -266,50 +339,45 @@ button.stats-overdue-card:hover {
   color: var(--text-default);
   margin-bottom: 12px;
 }
+/* 完成率卡标题：靶心图标（已完成蓝）+ 文字，同逾期卡/工作状态卡头部格式 */
+.stats-chart-card__title--rate {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.stats-chart-card__title-icon {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  display: inline-flex;
+  color: var(--viz-series-sky);
+}
 
 .stats-chart-card__body {
   flex: 1;
   width: 100%;
 }
 
-/* ===== Donut Chart ===== */
+/* ===== Donut Chart（完成率卡：左环右图例，唯一实例布局，原基础/修饰双套规则已合并）===== */
 .donut-chart {
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: 16px;
 }
 
 .donut-chart__svg {
-  width: 220px;
-  height: 220px;
-}
-
-/* 紧凑模式（第一排完成率卡）：小环 + 右侧纵向图例 */
-.donut-chart--compact {
-  flex-direction: row;
-  gap: 20px;
-}
-.donut-chart__svg--compact {
-  width: 180px;
-  height: 180px;
+  width: 160px;
+  height: 160px;
   flex-shrink: 0;
 }
-.donut-chart__legend--rows {
-  grid-template-columns: 1fr;
-  width: auto;
-  max-width: none;
-  gap: 10px;
-}
 
-/* ===== Donut Chart Legend ===== */
+/* ===== Donut Chart Legend（纵向三行）===== */
 .donut-chart__legend {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px 16px;
-  width: 100%;
-  max-width: 240px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 10px;
 }
 
 .donut-chart__legend-item {
@@ -326,6 +394,11 @@ button.stats-overdue-card:hover {
   flex-shrink: 0;
 }
 
+/* 圆环图图例配色（与 viz 系列令牌一致，替代内联 style） */
+.donut-chart__legend-dot--sky { background: var(--viz-series-sky); }
+.donut-chart__legend-dot--sky-light { background: var(--viz-series-sky-light); }
+.donut-chart__legend-dot--coral { background: var(--viz-series-coral); }
+
 .donut-chart__legend-label {
   color: var(--text-secondary);
   flex: 1;
@@ -335,6 +408,17 @@ button.stats-overdue-card:hover {
   font-weight: 600;
   color: var(--text-default);
   font-variant-numeric: tabular-nums;
+}
+
+/* ===== 趋势图空态（本周无任何任务动态）===== */
+.stats-chart-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 160px;
+  color: var(--text-tertiary);
+  font-size: 16px;
 }
 
 /* ===== Combo Chart (Bar + Line) ===== */
@@ -351,12 +435,20 @@ button.stats-overdue-card:hover {
   display: block;
 }
 
+/* 柱子默认不可点击（子任务系列纯展示）；主任务系列带 --link 可下钻 */
 .cmb-bar {
   transition: opacity 0.2s, filter 0.2s;
+  cursor: default;
+}
+.cmb-bar--link {
   cursor: pointer;
 }
-.cmb-bar:hover {
-  filter: brightness(1.15);
+.cmb-bar--link:hover {
+  filter: brightness(1.12);
+}
+/* 悬停某天时其余列淡化（由 JS 切换类名） */
+.cmb-bar.is-col-dim {
+  opacity: 0.3;
 }
 .cmb-dot {
   pointer-events: none;
@@ -365,10 +457,7 @@ button.stats-overdue-card:hover {
   pointer-events: none;
 }
 .cmb-hover-target {
-  cursor: pointer;
-}
-.cmb-hover-target:hover ~ .cmb-bar {
-  filter: brightness(1.1);
+  cursor: default;
 }
 
 /* Tooltip */
@@ -460,16 +549,15 @@ button.cmb-legend-item {
 /* ===== Responsive ===== */
 @media (max-width: 1024px) {
   .stats-hero-row { grid-template-columns: 1fr; }
-  .stats-kpi-row { grid-template-columns: repeat(3, 1fr); }
+  .stats-kpi-row { grid-template-columns: repeat(2, 1fr); }
 }
 @media (max-width: 480px) {
   .stats-kpi-row { grid-template-columns: 1fr; gap: 12px; }
   .stats-kpi__metric { font-size: 36px; }
+  .stats-kpi__frac-den { font-size: 22px; }
   .stats-kpi__label { font-size: 16px; }
   .stats-range-pill { padding: 0 10px; font-size: 14px; }
-  .donut-chart__svg { width: 180px; height: 180px; }
-  .donut-chart__svg--compact { width: 150px; height: 150px; }
-  .donut-chart__legend { grid-template-columns: 1fr; }
-  .stats-overdue-card__num { font-size: 48px; }
+  .stats-overdue-card__num { font-size: 58px; }
   .stats-overdue-card__label { font-size: 16px; }
+  .stats-monthly-row__num { font-size: 58px; }
 }

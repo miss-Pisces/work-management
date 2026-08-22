@@ -3,7 +3,7 @@
 
 import { icons } from '../utils/icons.js';
 import { getRoutes, navigate, getCurrent, subscribe } from '../router.js';
-import { formatLongDate } from '../utils/date.js';
+import { formatLongDate, toISODate } from '../utils/date.js';
 
 export function createShell(onNavigate) {
   const routes = getRoutes();
@@ -16,7 +16,7 @@ export function createShell(onNavigate) {
       <div class="wf-sidebar__logo">
         <div class="wf-sidebar__logo-top">
           <div class="wf-sidebar__logo-icon">
-            <svg viewBox="0 0 52 52" xmlns="http://www.w3.org/2000/svg" style="display: block; width: 52px; height: 52px;">
+            <svg viewBox="0 0 52 52" xmlns="http://www.w3.org/2000/svg">
               <rect width="52" height="52" rx="14" fill="#4b3fe3"/>
               <rect x="13" y="14" width="7" height="7" rx="1.5" fill="none" stroke="#fff" stroke-width="2"/>
               <path d="M15 17.5 L16.5 19 L19 16" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
@@ -44,11 +44,12 @@ export function createShell(onNavigate) {
     </div>
   `;
 
-  // 渲染侧栏导航
+  // 渲染侧栏导航（button 保证键盘可达）
   const navEl = el.querySelector('#wf-nav');
   const routeIcons = { '/tasks': 'tasks', '/log': 'log', '/stats': 'stats' };
   routes.forEach((r) => {
-    const item = document.createElement('div');
+    const item = document.createElement('button');
+    item.type = 'button';
     item.className = 'wf-sidebar__nav-item' + (state.current === r.path ? ' is-active' : '');
     item.dataset.path = r.path;
     item.innerHTML = `
@@ -62,16 +63,30 @@ export function createShell(onNavigate) {
     navEl.appendChild(item);
   });
 
-  // 日期
+  // 日期（跨零点自动更新：常驻托盘应用不重开页面也要显示正确日期）
   const updateDate = () => {
     el.querySelector('#wf-sidebar-date').textContent = formatLongDate(new Date());
   };
   updateDate();
+  let lastDateKey = toISODate(new Date());
+  const dateTimer = setInterval(() => {
+    const key = toISODate(new Date());
+    if (key !== lastDateKey) {
+      lastDateKey = key;
+      updateDate();
+    }
+  }, 30000);
 
   // 高亮当前导航
   const updateNav = () => {
     navEl.querySelectorAll('.wf-sidebar__nav-item').forEach((n) => {
-      n.classList.toggle('is-active', n.dataset.path === state.current);
+      const active = n.dataset.path === state.current;
+      n.classList.toggle('is-active', active);
+      if (active) {
+        n.setAttribute('aria-current', 'page');
+      } else {
+        n.removeAttribute('aria-current');
+      }
     });
   };
 
@@ -108,6 +123,7 @@ export function createShell(onNavigate) {
 
   el._destroy = () => {
     window.removeEventListener('wf-open-sidebar', handleOpenSidebar);
+    clearInterval(dateTimer);
     unsub();
   };
 

@@ -109,6 +109,10 @@
   --viz-series-amber: #fea900;
   --viz-series-mint: #15a877;
   --viz-series-sky: #2f74ff;
+  --viz-series-sky-light: #87ceeb;
+  /* 天空蓝加深档：白底大号数字文本用（对比度 ≥3:1，大面积色块仍用 sky-light） */
+  --viz-series-sky-deep: #3a94cf;
+  --viz-action-day: #8cc269;
 
   /* layout */
   --sidebar-width: 220px;
@@ -144,9 +148,34 @@ table { border-collapse: collapse; width: 100%; }
 ::-webkit-scrollbar-thumb { background: var(--bg-overlay-l2); border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--bg-overlay-l3); }
 
+/* ═══ 全局键盘可达性：统一焦点环（:focus-visible 仅键盘触发，不干扰鼠标点击）═══ */
+:where(button, [role="button"], select, input, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--bg-brand);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ═══ 无障碍：尊重系统"减弱动态效果"设置 ═══ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 /* Utility: number font */
 .mono, .num, code, kbd, samp, pre {
   font-family: var(--font-family-mono);
   font-variant-numeric: tabular-nums;
 }
 .metric { font-family: var(--font-family-metric); font-variant-numeric: tabular-nums; }
+
+/* Utility: 按钮前导图标（新建任务/添加日志的 + 号等，跨页面共用） */
+.wf-btn__lead-icon {
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+  margin-right: 4px;
+}

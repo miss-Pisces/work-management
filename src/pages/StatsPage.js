@@ -23,8 +23,14 @@ export function createStatsPage() {
     range: 'today',
     customStart: '',
     customEnd: '',
+    appliedCustom: null, // 已应用的自定义范围 { start, end }；null 表示尚未应用
     hiddenSeries: {},
   };
+
+  // 自定义草稿是否有效：起止齐全且起始 ≤ 结束（ISO 字符串可直接比较）
+  function isDraftValid() {
+    return !!(state.customStart && state.customEnd && state.customStart <= state.customEnd);
+  }
 
   // 趋势图参考宽度：与卡片内容区实际宽度一致，由 ResizeObserver 校正
   let chartW = 1140;
@@ -125,11 +131,25 @@ export function createStatsPage() {
     }
 
     const xLabels = [];
+    const futureMasks = [];
+    // 今天在本周的位置（0=周一…6=周日），其后的列为"尚未发生"
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const todayIdx = weeklyData.findIndex((d) => d.date === todayStr);
     weeklyData.forEach((d, i) => {
       const x = padLeft + i * groupW + groupW / 2;
+      const isFuture = todayIdx >= 0 && i > todayIdx;
+      if (isFuture) {
+        futureMasks.push(
+          `<rect class="cmb-future-mask" x="${(padLeft + i * groupW).toFixed(1)}" y="${padTop}" width="${groupW.toFixed(1)}" height="${plotH}" fill="#98a2b3" fill-opacity="0.08" pointer-events="none" />`
+        );
+      }
+      const weekFill = isFuture ? '#98a2b3' : '#475467';
+      const weekWeight = isFuture ? '400' : '500';
+      const dateFill = isFuture ? '#98a2b3' : '#667085';
       xLabels.push(`
-        <text x="${x}" y="${chartH - padBottom + 15}" text-anchor="middle" font-size="14" font-weight="500" fill="#475467">${d.label}</text>
-        <text x="${x}" y="${chartH - padBottom + 32}" text-anchor="middle" font-size="13" fill="#667085">${d.dateLabel}</text>
+        <text x="${x}" y="${chartH - padBottom + 15}" text-anchor="middle" font-size="14" font-weight="${weekWeight}" fill="${weekFill}">${d.label}</text>
+        <text x="${x}" y="${chartH - padBottom + 32}" text-anchor="middle" font-size="13" fill="${dateFill}">${d.dateLabel}</text>
       `);
     });
 
@@ -144,8 +164,10 @@ export function createStatsPage() {
         const barY = padTop + plotH - barH;
 
         if (barH > 0) {
+          // 主任务系列可点击下钻；子任务系列纯展示
+          const linkCls = (s.key === 'newTask' || s.key === 'doneTask') ? ' cmb-bar--link' : '';
           bars.push(
-            `<rect class="cmb-bar cmb-bar--${s.key}" data-day="${i}" data-series="${s.key}" data-value="${val}" ` +
+            `<rect class="cmb-bar cmb-bar--${s.key}${linkCls}" data-day="${i}" data-series="${s.key}" data-value="${val}" ` +
             `x="${barX.toFixed(1)}" y="${barY.toFixed(1)}" width="${barW.toFixed(1)}" height="${barH.toFixed(1)}" ` +
             `fill="${s.color}" rx="3" ry="3" />`
           );
@@ -180,9 +202,10 @@ export function createStatsPage() {
           ${yLines.join('')}
           ${yLabels.join('')}
           <line x1="${padLeft}" y1="${padTop + plotH}" x2="${chartW - padRight}" y2="${padTop + plotH}" stroke="#d0d5dd" stroke-width="1" />
-          ${bars.join('')}
+          ${futureMasks.join('')}
           ${xLabels.join('')}
           ${hoverTargets.join('')}
+          ${bars.join('')}
         </svg>
         <div class="cmb-tooltip" id="cmb-tooltip"></div>
         <div class="cmb-legend">${legendItems}</div>
@@ -202,8 +225,8 @@ export function createStatsPage() {
     }
 
     const data = [
-      { value: stats.overallDone, color: 'var(--viz-series-mint)' },
-      { value: stats.overallProgress, color: 'var(--viz-series-brand)' },
+      { value: stats.overallDone, color: 'var(--viz-series-sky)' },
+      { value: stats.overallProgress, color: 'var(--viz-series-sky-light)' },
     ].filter((item) => item.value > 0);
 
     // 只有一种状态：画完整圆环，中心显示完成率（done / activeTotal）
@@ -235,11 +258,31 @@ export function createStatsPage() {
   }
 
   function render() {
-    const rangeParam = state.range === 'custom' && state.customStart && state.customEnd 
-      ? { start: state.customStart, end: state.customEnd } 
+    // 自定义范围：仅使用「已应用」的起止日期；未应用时不给 KPI 提供范围（显示占位）
+    const customActive = state.range === 'custom';
+    const rangeParam = customActive
+      ? (state.appliedCustom ? { start: state.appliedCustom.start, end: state.appliedCustom.end } : null)
       : state.range;
-    const stats = store.getStats(rangeParam);
+    // hero 卡与完成率为全局口径，不依赖 range；range 为 null 时 KPI 区显示占位
+    const stats = store.getStats(rangeParam || 'all');
     const weeklyData = getWeeklyData();
+    const monthlyAction = store.getMonthlyActionStats();
+    const weekTotal = weeklyData.reduce((s, d) => s + d.newTask + d.newSubtask + d.doneTask + d.doneSubtask, 0);
+
+    // KPI aria-label 用的范围描述
+    const rangeText = customActive ? '所选范围' : (RANGES.find((r) => r.key === state.range) || {}).label || '';
+
+    // 自定义草稿提示：无效时说明原因；有效但未应用时提示生效方式
+    let customHint = '';
+    if (customActive) {
+      if (!state.customStart || !state.customEnd) {
+        customHint = '<span class="stats-custom-date__hint">请选择开始与结束日期</span>';
+      } else if (state.customStart > state.customEnd) {
+        customHint = '<span class="stats-custom-date__hint">结束日期不能早于开始日期</span>';
+      } else if (!state.appliedCustom || state.appliedCustom.start !== state.customStart || state.appliedCustom.end !== state.customEnd) {
+        customHint = '<span class="stats-custom-date__hint stats-custom-date__hint--muted">点击「应用」查看该范围统计</span>';
+      }
+    }
 
     el.innerHTML = `
       <div class="stats-header">
@@ -248,10 +291,10 @@ export function createStatsPage() {
 
       <div class="stats-hero-row">
         ${stats.overdue > 0 ? `
-          <button type="button" class="stats-overdue-card is-danger" data-kpi-click="overdue" title="查看逾期任务">
+          <button type="button" class="stats-overdue-card is-danger" data-kpi-click="overdue" title="查看逾期主任务" aria-label="查看逾期主任务，${stats.overdue} 项">
             <span class="stats-overdue-card__header">
               <span class="stats-overdue-card__icon">${icons.warning}</span>
-              <span class="stats-overdue-card__label">逾期任务数</span>
+              <span class="stats-overdue-card__label">逾期主任务数</span>
             </span>
             <span class="stats-overdue-card__num">${stats.overdue}</span>
             <span class="stats-overdue-card__hint">
@@ -262,36 +305,60 @@ export function createStatsPage() {
           <div class="stats-overdue-card is-success">
             <span class="stats-overdue-card__header">
               <span class="stats-overdue-card__icon">${icons.checkCircle}</span>
-              <span class="stats-overdue-card__label">逾期任务数</span>
+              <span class="stats-overdue-card__label">逾期主任务数</span>
             </span>
             <span class="stats-overdue-card__num">${stats.overdue}</span>
             <span class="stats-overdue-card__hint">当前无逾期任务，一切按时推进</span>
           </div>
         `}
         <div class="stats-chart-card stats-hero-card">
-          <div class="stats-chart-card__title">任务完成率</div>
+          <div class="stats-chart-card__title stats-chart-card__title--rate">
+            <span class="stats-chart-card__title-icon">${icons.target}</span>
+            <span>主任务完成率</span>
+          </div>
           <div class="stats-chart-card__body">
             <div class="donut-chart donut-chart--compact">
-              <svg viewBox="0 0 100 100" class="donut-chart__svg donut-chart__svg--compact">
+              <svg viewBox="0 0 100 100" class="donut-chart__svg donut-chart__svg--compact" role="img"
+                aria-label="${stats.overallTotal - stats.overallTerminated > 0
+                  ? `全部主任务完成率 ${stats.completionRate}%，已完成 ${stats.overallDone}，进行中 ${stats.overallProgress}`
+                  : '暂无任务'}">
                 ${renderDonutSegments(stats)}
               </svg>
               <div class="donut-chart__legend donut-chart__legend--rows">
                 <div class="donut-chart__legend-item">
-                  <span class="donut-chart__legend-dot" style="background:var(--viz-series-mint)"></span>
+                  <span class="donut-chart__legend-dot donut-chart__legend-dot--sky"></span>
                   <span class="donut-chart__legend-label">已完成</span>
                   <span class="donut-chart__legend-value">${stats.overallDone}</span>
                 </div>
                 <div class="donut-chart__legend-item">
-                  <span class="donut-chart__legend-dot" style="background:var(--viz-series-brand)"></span>
+                  <span class="donut-chart__legend-dot donut-chart__legend-dot--sky-light"></span>
                   <span class="donut-chart__legend-label">进行中</span>
                   <span class="donut-chart__legend-value">${stats.overallProgress}</span>
                 </div>
                 <div class="donut-chart__legend-item">
-                  <span class="donut-chart__legend-dot" style="background:var(--viz-series-coral)"></span>
+                  <span class="donut-chart__legend-dot donut-chart__legend-dot--coral"></span>
                   <span class="donut-chart__legend-label">已终止</span>
                   <span class="donut-chart__legend-value">${stats.overallTerminated}</span>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+        <div class="stats-overdue-card is-action" title="工作 = 当月有完成主任务或子任务的天数（含今天）；躺平 = 当月截至昨日无任何记录的天数；不随时间范围变化">
+          <span class="stats-overdue-card__header">
+            <span class="stats-overdue-card__icon">${icons.checkCircle}</span>
+            <span class="stats-overdue-card__label">本月工作状态</span>
+          </span>
+          <div class="stats-monthly-rows">
+            <div class="stats-monthly-row">
+              <span class="stats-monthly-row__label">工作</span>
+              <span class="stats-monthly-row__num stats-monthly-row__num--work">${String(monthlyAction.actionCount).padStart(2, '0')}</span>
+              <span class="stats-monthly-row__label">天</span>
+            </div>
+            <div class="stats-monthly-row">
+              <span class="stats-monthly-row__label stats-monthly-row__label--idle">躺平</span>
+              <span class="stats-monthly-row__num stats-monthly-row__num--idle">${monthlyAction.idleCount}</span>
+              <span class="stats-monthly-row__label stats-monthly-row__label--idle">天</span>
             </div>
           </div>
         </div>
@@ -302,52 +369,63 @@ export function createStatsPage() {
       <div class="stats-range-section">
         <div class="stats-range-bar">
           ${RANGES.map((r) => `
-            <button class="stats-range-pill ${state.range === r.key ? 'stats-range-pill--active' : ''}" data-range="${r.key}">${r.label}</button>
+            <button class="stats-range-pill ${state.range === r.key ? 'stats-range-pill--active' : ''}" data-range="${r.key}" aria-pressed="${state.range === r.key}">${r.label}</button>
           `).join('')}
         </div>
         ${state.range === 'custom' ? `
           <div class="stats-custom-date">
-            <input type="date" id="stats-custom-start" value="${state.customStart}" class="stats-custom-date__input" />
+            <input type="date" id="stats-custom-start" value="${state.customStart}" class="stats-custom-date__input" aria-label="统计开始日期" />
             <span class="stats-custom-date__separator">至</span>
-            <input type="date" id="stats-custom-end" value="${state.customEnd}" class="stats-custom-date__input" />
-            <button class="wf-btn wf-btn--secondary" id="stats-custom-apply">应用</button>
+            <input type="date" id="stats-custom-end" value="${state.customEnd}" class="stats-custom-date__input" aria-label="统计结束日期" />
+            <button class="wf-btn wf-btn--secondary" id="stats-custom-apply" ${isDraftValid() ? '' : 'disabled'}>应用</button>
+            ${customHint}
           </div>
         ` : ''}
+        ${rangeParam ? `
         <div class="stats-kpi-row">
           ${stats.total > 0 ? `
-            <button type="button" class="stats-kpi-card stats-kpi-card--clickable" data-kpi-click="all" title="查看任务列表">
-              <span class="stats-kpi__label">任务总数</span>
+            <button type="button" class="stats-kpi-card stats-kpi-card--clickable" data-kpi-click="all" title="查看主任务列表" aria-label="查看${rangeText}主任务列表，共 ${stats.total} 项">
+              <span class="stats-kpi__label">主任务总数</span>
               <span class="stats-kpi__metric metric">${stats.total}</span>
             </button>
           ` : `
             <div class="stats-kpi-card">
-              <span class="stats-kpi__label">任务总数</span>
+              <span class="stats-kpi__label">主任务总数</span>
               <span class="stats-kpi__metric metric">${stats.total}</span>
             </div>
           `}
           ${stats.done > 0 ? `
-            <button type="button" class="stats-kpi-card stats-kpi-card--clickable" data-kpi-click="done" title="查看已完成任务">
-              <span class="stats-kpi__label">任务完成数</span>
+            <button type="button" class="stats-kpi-card stats-kpi-card--clickable" data-kpi-click="done" title="查看已完成主任务" aria-label="查看${rangeText}已完成主任务，${stats.done} 项">
+              <span class="stats-kpi__label">主任务完成数</span>
               <span class="stats-kpi__metric metric stats-kpi__metric--brand">${stats.done}</span>
             </button>
           ` : `
             <div class="stats-kpi-card">
-              <span class="stats-kpi__label">任务完成数</span>
+              <span class="stats-kpi__label">主任务完成数</span>
               <span class="stats-kpi__metric metric stats-kpi__metric--brand">${stats.done}</span>
             </div>
           `}
           ${stats.terminated > 0 ? `
-            <button type="button" class="stats-kpi-card stats-kpi-card--clickable" data-kpi-click="terminated" title="查看已终止任务">
-              <span class="stats-kpi__label">终止任务数</span>
+            <button type="button" class="stats-kpi-card stats-kpi-card--clickable" data-kpi-click="terminated" title="查看已终止主任务" aria-label="查看${rangeText}已终止主任务，${stats.terminated} 项">
+              <span class="stats-kpi__label">终止主任务数</span>
               <span class="stats-kpi__metric metric stats-kpi__metric--warning">${stats.terminated}</span>
             </button>
           ` : `
             <div class="stats-kpi-card">
-              <span class="stats-kpi__label">终止任务数</span>
+              <span class="stats-kpi__label">终止主任务数</span>
               <span class="stats-kpi__metric metric stats-kpi__metric--warning">${stats.terminated}</span>
             </div>
           `}
+          <div class="stats-kpi-card" title="统计范围内新建主任务所含子任务的完成情况（已完成/总数），不随子任务创建时间区分">
+            <span class="stats-kpi__label">子任务完成数/子任务总数</span>
+            <span class="stats-kpi__metric metric stats-kpi__metric--subtask">
+              <span class="stats-kpi__frac-num">${stats.subtaskDone}</span><span class="stats-kpi__frac-den">/${stats.subtaskTotal}</span>
+            </span>
+          </div>
         </div>
+        ` : `
+        <div class="stats-kpi-empty">请选择日期范围并点击「应用」后查看统计</div>
+        `}
       </div>
 
       <div class="stats-section-divider"></div>
@@ -356,7 +434,7 @@ export function createStatsPage() {
         <div class="stats-chart-card">
           <div class="stats-chart-card__title">本周任务趋势</div>
           <div class="stats-chart-card__body">
-            ${renderComboChart(weeklyData)}
+            ${weekTotal > 0 ? renderComboChart(weeklyData) : '<div class="stats-chart-empty">本周暂无任务动态</div>'}
           </div>
         </div>
       </div>
@@ -369,28 +447,32 @@ export function createStatsPage() {
         if (state.range !== 'custom') {
           state.customStart = '';
           state.customEnd = '';
+          state.appliedCustom = null;
         }
         render();
       });
     });
 
-    // 自定义日期输入
+    // 自定义日期输入（变更即时刷新校验提示与应用按钮状态，统计仍需点击「应用」）
     const startInput = el.querySelector('#stats-custom-start');
     const endInput = el.querySelector('#stats-custom-end');
     const applyBtn = el.querySelector('#stats-custom-apply');
     if (startInput) {
       startInput.addEventListener('change', (e) => {
         state.customStart = e.target.value;
+        render();
       });
     }
     if (endInput) {
       endInput.addEventListener('change', (e) => {
         state.customEnd = e.target.value;
+        render();
       });
     }
     if (applyBtn) {
       applyBtn.addEventListener('click', () => {
-        if (state.customStart && state.customEnd) {
+        if (isDraftValid()) {
+          state.appliedCustom = { start: state.customStart, end: state.customEnd };
           render();
         }
       });
@@ -400,8 +482,12 @@ export function createStatsPage() {
     el.querySelectorAll('[data-kpi-click]').forEach((card) => {
       card.addEventListener('click', () => {
         const filterType = card.dataset.kpiClick;
-        // 逾期为全局口径，下钻不携带范围参数
-        const rangeSuffix = filterType === 'overdue' ? '' : `&range=${state.range}`;
+        // 逾期为全局口径，下钻不携带范围参数；自定义范围传递已应用的起止日期段
+        let rangeVal = state.range;
+        if (filterType !== 'overdue' && state.range === 'custom' && state.appliedCustom) {
+          rangeVal = `${state.appliedCustom.start}:${state.appliedCustom.end}`;
+        }
+        const rangeSuffix = filterType === 'overdue' ? '' : `&range=${rangeVal}`;
         window.location.hash = `#/tasks?filter=${filterType}${rangeSuffix}`;
       });
     });
@@ -427,43 +513,72 @@ export function createStatsPage() {
       });
     });
 
-    // 悬停显示 tooltip
+    // 悬停显示 tooltip + 整列高亮；主任务柱子点击下钻
     const tooltip = el.querySelector('#cmb-tooltip');
     const svgEl = el.querySelector('.combo-chart__svg');
     if (tooltip && svgEl) {
-      el.querySelectorAll('.cmb-hover-target').forEach((target) => {
-        target.addEventListener('mouseenter', (_e) => {
-          const dayIdx = parseInt(target.dataset.day, 10);
-          const d = weeklyData[dayIdx];
-          if (!d) return;
-          const visibleSeries = SERIES_CONFIG.filter((s) => !state.hiddenSeries[s.key]);
-          let html = `<div class="cmb-tooltip__title">${d.label}（${d.dateLabel}）</div>`;
-          visibleSeries.forEach((s) => {
-            html += `
-              <div class="cmb-tooltip__row">
-                <span class="cmb-tooltip__dot" style="background:${s.color};"></span>
-                <span class="cmb-tooltip__label">${s.label}</span>
-                <span class="cmb-tooltip__value">${d[s.key]}</span>
-              </div>
-            `;
-          });
-          tooltip.innerHTML = html;
-          tooltip.style.display = 'block';
-
-          const svgRect = svgEl.getBoundingClientRect();
-          const groupW = (svgRect.width - CHART_PAD_LEFT - CHART_PAD_RIGHT) / 7;
-          const left = CHART_PAD_LEFT + dayIdx * groupW + groupW / 2;
-          const tooltipRect = tooltip.getBoundingClientRect();
-          let tooltipLeft = left - tooltipRect.width / 2;
-          if (tooltipLeft < 4) tooltipLeft = 4;
-          if (tooltipLeft + tooltipRect.width > svgRect.width - 4) {
-            tooltipLeft = svgRect.width - tooltipRect.width - 4;
-          }
-          tooltip.style.left = tooltipLeft + 'px';
-          tooltip.style.top = '8px';
+      const showTooltip = (dayIdx) => {
+        const d = weeklyData[dayIdx];
+        if (!d) return;
+        const visibleSeries = SERIES_CONFIG.filter((s) => !state.hiddenSeries[s.key]);
+        let html = `<div class="cmb-tooltip__title">${d.label}（${d.dateLabel}）</div>`;
+        visibleSeries.forEach((s) => {
+          html += `
+            <div class="cmb-tooltip__row">
+              <span class="cmb-tooltip__dot" style="background:${s.color};"></span>
+              <span class="cmb-tooltip__label">${s.label}</span>
+              <span class="cmb-tooltip__value">${d[s.key]}</span>
+            </div>
+          `;
         });
-        target.addEventListener('mouseleave', () => {
-          tooltip.style.display = 'none';
+        tooltip.innerHTML = html;
+        tooltip.style.display = 'block';
+
+        const svgRect = svgEl.getBoundingClientRect();
+        const groupW = (svgRect.width - CHART_PAD_LEFT - CHART_PAD_RIGHT) / 7;
+        const left = CHART_PAD_LEFT + dayIdx * groupW + groupW / 2;
+        const tooltipRect = tooltip.getBoundingClientRect();
+        let tooltipLeft = left - tooltipRect.width / 2;
+        if (tooltipLeft < 4) tooltipLeft = 4;
+        if (tooltipLeft + tooltipRect.width > svgRect.width - 4) {
+          tooltipLeft = svgRect.width - tooltipRect.width - 4;
+        }
+        tooltip.style.left = tooltipLeft + 'px';
+        tooltip.style.top = '8px';
+      };
+      const hideTooltip = () => {
+        tooltip.style.display = 'none';
+      };
+      // 整列高亮：悬停列满亮，其余列淡化
+      const highlightColumn = (dayIdx) => {
+        svgEl.querySelectorAll('.cmb-bar').forEach((b) => {
+          b.classList.toggle('is-col-dim', b.dataset.day !== String(dayIdx));
+        });
+      };
+      const clearHighlight = () => {
+        svgEl.querySelectorAll('.cmb-bar.is-col-dim').forEach((b) => b.classList.remove('is-col-dim'));
+      };
+
+      // 悬停热区（整列）与柱子（置于热区上层）都触发 tooltip 与高亮
+      el.querySelectorAll('.cmb-hover-target, .cmb-bar').forEach((zone) => {
+        zone.addEventListener('mouseenter', () => {
+          const dayIdx = parseInt(zone.dataset.day, 10);
+          showTooltip(dayIdx);
+          highlightColumn(dayIdx);
+        });
+        zone.addEventListener('mouseleave', () => {
+          hideTooltip();
+          clearHighlight();
+        });
+      });
+
+      // 主任务柱子点击下钻：新建 → 任务列表（按创建日）；完成 → 已完成任务（按完成日）
+      el.querySelectorAll('.cmb-bar--link').forEach((bar) => {
+        bar.addEventListener('click', () => {
+          const d = weeklyData[parseInt(bar.dataset.day, 10)];
+          if (!d) return;
+          const filter = bar.dataset.series === 'doneTask' ? 'done' : 'all';
+          window.location.hash = `#/tasks?filter=${filter}&range=${d.date}`;
         });
       });
     }

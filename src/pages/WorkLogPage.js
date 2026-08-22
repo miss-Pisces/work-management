@@ -46,11 +46,9 @@ export function createWorkLogPage() {
     return autoRecords;
   }
 
-  function render() {
-    const dateObj = fromISODate(state.currentDate);
+  // ─── 共用：搜索过滤（render 与 renderContentOnly 唯一数据源）───
+  function getFilteredRecords() {
     const log = store.getWorkLog(state.currentDate);
-
-    // 自动记录与手动记录
     let autoRecords = getAutoRecords(state.currentDate);
     let manualEntries = log.manualEntries.slice();
 
@@ -61,138 +59,218 @@ export function createWorkLogPage() {
       autoRecords = [];
       manualEntries = [];
       allDates.forEach((date) => {
-        const dateAuto = getAutoRecords(date);
-        dateAuto.forEach((r) => {
+        getAutoRecords(date).forEach((r) => {
           if (r.text.toLowerCase().includes(q) || (r.taskName && r.taskName.toLowerCase().includes(q))) {
             autoRecords.push({ ...r, _date: date });
           }
         });
-        const dateLog = store.getWorkLog(date);
-        dateLog.manualEntries.forEach((e) => {
+        store.getWorkLog(date).manualEntries.forEach((e) => {
           if (e.text.toLowerCase().includes(q)) {
             manualEntries.push({ ...e, _date: date });
           }
         });
       });
     }
+    return { autoRecords, manualEntries };
+  }
 
+  // ─── 共用：记录卡片 HTML ───
+  function buildRecordsHtml() {
+    const { autoRecords, manualEntries } = getFilteredRecords();
+
+    const autoList = autoRecords.length === 0
+      ? `<div class="wl-auto-empty">${state.search ? '未找到匹配的日志' : '今日暂无自动记录，任务完成后将自动呈现在这里'}</div>`
+      : autoRecords.map((r) => `
+          <div class="wl-auto-item">
+            <div class="wl-auto-item__check">${icons.check}</div>
+            <div class="wl-auto-item__body">
+              <div class="wl-auto-item__text wl-auto-item__text--done">${r.type === 'subtask' ? escapeHtml(r.subtaskName) : escapeHtml(r.taskName)}</div>
+              ${r.type === 'subtask' ? `<span class="wl-auto-item__sub">子任务 · 所属：${escapeHtml(r.taskName)}</span>` : ''}
+              ${r._date ? `<span class="wl-record-date">${r._date}</span>` : ''}
+            </div>
+            <div class="wl-auto-item__indicator"></div>
+          </div>
+        `).join('');
+
+    const manualList = manualEntries.length === 0
+      ? `<div class="wl-auto-empty">${state.search ? '未找到匹配的日志' : '今日暂无手动记录，点击左上方「添加日志」开始记录'}</div>`
+      : manualEntries.map((e) => `
+          <div class="wl-manual-entry">
+            <span class="wl-manual-entry__time">${e.time}</span>
+            <span class="wl-manual-entry__text">${escapeHtml(e.text)}</span>
+            ${e._date ? `<span class="wl-record-date">${e._date}</span>` : ''}
+          </div>
+        `).join('');
+
+    return `
+      <!-- 自动记录 -->
+      <div class="wl-section">
+        <div class="wl-section-header">
+          <span class="wl-section-title"><span class="wl-section-title__icon">${icons.clock}</span> 自动记录 (已完成任务/子任务)</span>
+          <span class="wl-section-count">${autoRecords.length} 项</span>
+        </div>
+        <div class="wl-list">
+          ${autoList}
+        </div>
+      </div>
+
+      <div class="wl-divider"></div>
+
+      <!-- 手动记录 -->
+      <div class="wl-section">
+        <div class="wl-section-header">
+          <span class="wl-section-title"><span class="wl-section-title__icon">${icons.tasks}</span> 手动记录</span>
+          <span class="wl-section-count">${manualEntries.length} 项</span>
+        </div>
+        <div class="wl-list wl-list--manual">
+          <div class="wl-manual-entries">
+            ${manualList}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  // ─── 共用：月历 HTML（render 与 store 刷新的唯一数据源）───
+  function buildCalendarHtml() {
     const todayObj = new Date();
     const todayStr = toISODate(todayObj);
     const todayYear = todayObj.getFullYear();
     const todayMonth = todayObj.getMonth() + 1;
-    const isCurrentDay = state.currentDate === todayStr;
     const isMaxMonth = state.calYear > todayYear || (state.calYear === todayYear && state.calMonth >= todayMonth);
+    // 当月行动日集合（有完成任务/子任务的日期），用于月历标记
+    const { actionDates } = store.getMonthlyAction(state.calYear, state.calMonth);
+
+    return `
+      <div class="wl-calendar__header">
+        <button class="wl-calendar__nav-btn" id="wl-cal-prev" title="上个月" aria-label="上个月">${icons.chevronLeft || '<'}</button>
+        <div class="wl-calendar__title">
+          <span class="wl-calendar__month-label">${getMonthLabel(state.calYear, state.calMonth)}</span>
+          <span class="wl-calendar__lunar-label">${getLunarYearLabel(state.calYear, state.calMonth, 1)}</span>
+        </div>
+        <button class="wl-calendar__nav-btn" id="wl-cal-next" title="下个月" aria-label="下个月" ${isMaxMonth ? 'disabled' : ''}>${icons.chevronRight || '>'}</button>
+      </div>
+      <div class="wl-calendar__weekdays">
+        <span class="wl-calendar__weekday">一</span>
+        <span class="wl-calendar__weekday">二</span>
+        <span class="wl-calendar__weekday">三</span>
+        <span class="wl-calendar__weekday">四</span>
+        <span class="wl-calendar__weekday">五</span>
+        <span class="wl-calendar__weekday wl-calendar__weekday--weekend">六</span>
+        <span class="wl-calendar__weekday wl-calendar__weekday--weekend">日</span>
+      </div>
+      <div class="wl-calendar__grid" id="wl-cal-grid">
+        ${getMonthCalendar(state.calYear, state.calMonth).map((cell) => {
+          const isFuture = cell.date > todayStr;
+          // 行动日：当天有完成任务/子任务日志；今天不标记（还没过完，次日结算）
+          const isAction = !cell.isToday && !isFuture && actionDates.has(cell.date);
+          return `
+            <div class="wl-calendar__cell ${cell.isToday ? 'is-today' : ''} ${cell.date === state.currentDate ? 'is-selected' : ''} ${cell.isCurrentMonth ? '' : 'is-out'} ${cell.festival ? 'is-festival' : ''} ${isFuture ? 'is-future' : ''} ${isAction ? 'is-action' : ''}" data-date="${cell.date}" role="button" tabindex="-1" aria-label="${cell.date}${cell.isToday ? '，今天' : ''}${isAction ? '，行动日' : ''}" ${isAction ? 'title="行动日：当天有完成任务"' : ''}>
+              <span class="wl-calendar__day">${cell.day}</span>
+              <span class="wl-calendar__lunar">${cell.lunarShort}</span>
+            </div>
+          `;
+        }).join('')}
+      </div>
+      <div class="wl-calendar__legend">
+        <span class="wl-calendar__legend-item"><span class="wl-calendar__legend-dot wl-calendar__legend-dot--today"></span>今天</span>
+        <span class="wl-calendar__legend-item"><span class="wl-calendar__legend-dot wl-calendar__legend-dot--festival"></span>节日</span>
+        <span class="wl-calendar__legend-item"><span class="wl-calendar__legend-dot wl-calendar__legend-dot--action"></span>行动日</span>
+        <span class="wl-calendar__legend-item"><span class="wl-calendar__legend-dot wl-calendar__legend-dot--idle"></span>空闲日</span>
+      </div>
+    `;
+  }
+
+  // 月历事件绑定（buildCalendarHtml 重画后调用）
+  function bindCalendarEvents() {
+    const todayStr = toISODate(new Date());
+
+    el.querySelector('#wl-cal-prev').addEventListener('click', () => {
+      state.calMonth--;
+      if (state.calMonth < 1) {
+        state.calMonth = 12;
+        state.calYear--;
+      }
+      renderCalendar();
+    });
+    el.querySelector('#wl-cal-next').addEventListener('click', () => {
+      const t = new Date();
+      if (state.calYear > t.getFullYear() || (state.calYear === t.getFullYear() && state.calMonth >= t.getMonth() + 1)) return;
+      state.calMonth++;
+      if (state.calMonth > 12) {
+        state.calMonth = 1;
+        state.calYear++;
+      }
+      renderCalendar();
+    });
+
+    // 月历日期点击：切换查看该日期的日志（未来日期禁止点击）
+    el.querySelectorAll('.wl-calendar__cell[data-date]').forEach((cell) => {
+      cell.addEventListener('click', () => {
+        if (cell.dataset.date > todayStr) return;
+        state.currentDate = cell.dataset.date;
+        render();
+      });
+    });
+  }
+
+  // 局部重画月历（store 数据变化、翻月时使用，不触碰搜索框焦点）
+  function renderCalendar() {
+    const cal = el.querySelector('.wl-calendar');
+    cal.innerHTML = buildCalendarHtml();
+    bindCalendarEvents();
+  }
+
+  // 局部重画记录卡片（搜索输入、store 数据变化时使用）
+  function renderContentOnly() {
+    el.querySelector('.wl-card').innerHTML = buildRecordsHtml();
+  }
+
+  function render() {
+    const dateObj = fromISODate(state.currentDate);
+
+    const todayObj = new Date();
+    const todayStr = toISODate(todayObj);
+    const isCurrentDay = state.currentDate === todayStr;
+    const isMaxDay = state.currentDate >= todayStr;
 
     el.innerHTML = `
       <div class="wl-page-header">
-        <button class="wf-menu-toggle-btn" id="wl-menu-toggle">${icons.menu}</button>
+        <button class="wf-menu-toggle-btn" id="wl-menu-toggle" aria-label="打开菜单">${icons.menu}</button>
         <button class="wl-btn wl-btn--primary" id="wl-add-log-btn">
-          <span style="font-size:16px;line-height:1;margin-right:2px;">+</span> 添加日志
+          <span class="wf-btn__lead-icon">${icons.plus}</span> 添加日志
         </button>
         <div class="wl-search-wrapper">
           <span class="wl-search-icon">${icons.search}</span>
-          <input type="text" class="wl-search-input" id="wl-log-search" placeholder="搜索日志..." />
+          <input type="text" class="wl-search-input" id="wl-log-search" placeholder="搜索日志..." aria-label="搜索日志" />
         </div>
       </div>
 
       <div class="wl-date-nav">
         <div class="wl-date-nav__center">
+          <button class="wl-day-nav-btn" id="wl-day-prev" title="前一天" aria-label="查看前一天">${icons.chevronLeft}</button>
           <span class="wl-date-nav__date">${formatLongDate(dateObj)}</span>
           ${isCurrentDay ? `
             <span class="wl-date-nav__badge">今天</span>
           ` : `
             <button class="wl-date-nav__badge wl-date-nav__badge--back" id="wl-back-today" title="点击一键返回今天">← 返回今天</button>
           `}
+          <button class="wl-day-nav-btn" id="wl-day-next" title="后一天" aria-label="查看后一天" ${isMaxDay ? 'disabled' : ''}>${icons.chevronRight}</button>
         </div>
-        <button class="wl-export-btn" id="wl-export-btn" style="display:inline-flex;align-items:center;gap:4px;">
-          <span style="display:inline-flex;width:14px;height:14px;color:var(--text-secondary);">${icons.download}</span> 导出日志
+        <button class="wl-export-btn" id="wl-export-btn">
+          <span class="wl-export-btn__icon">${icons.download}</span> 导出日志
         </button>
       </div>
 
       <div class="wl-main-layout">
         <div class="wl-calendar-sidebar">
           <div class="wl-calendar">
-            <div class="wl-calendar__header">
-              <button class="wl-calendar__nav-btn" id="wl-cal-prev" title="上个月">${icons.chevronLeft || '<'}</button>
-              <div class="wl-calendar__title">
-                <span class="wl-calendar__month-label">${getMonthLabel(state.calYear, state.calMonth)}</span>
-                <span class="wl-calendar__lunar-label">${getLunarYearLabel(state.calYear, state.calMonth, 1)}</span>
-              </div>
-              <button class="wl-calendar__nav-btn" id="wl-cal-next" title="下个月" ${isMaxMonth ? 'disabled' : ''}>${icons.chevronRight || '>'}</button>
-            </div>
-            <div class="wl-calendar__weekdays">
-              <span class="wl-calendar__weekday">一</span>
-              <span class="wl-calendar__weekday">二</span>
-              <span class="wl-calendar__weekday">三</span>
-              <span class="wl-calendar__weekday">四</span>
-              <span class="wl-calendar__weekday">五</span>
-              <span class="wl-calendar__weekday wl-calendar__weekday--weekend">六</span>
-              <span class="wl-calendar__weekday wl-calendar__weekday--weekend">日</span>
-            </div>
-            <div class="wl-calendar__grid" id="wl-cal-grid">
-              ${getMonthCalendar(state.calYear, state.calMonth).map((cell) => {
-                const isFuture = cell.date > todayStr;
-                return `
-                  <div class="wl-calendar__cell ${cell.isToday ? 'is-today' : ''} ${cell.date === state.currentDate ? 'is-selected' : ''} ${cell.isCurrentMonth ? '' : 'is-out'} ${cell.festival ? 'is-festival' : ''} ${isFuture ? 'is-future' : ''}" data-date="${cell.date}">
-                    <span class="wl-calendar__day">${cell.day}</span>
-                    <span class="wl-calendar__lunar">${cell.lunarShort}</span>
-                  </div>
-                `;
-              }).join('')}
-            </div>
-            <div class="wl-calendar__legend">
-              <span class="wl-calendar__legend-item"><span class="wl-calendar__legend-dot wl-calendar__legend-dot--today"></span>今天</span>
-              <span class="wl-calendar__legend-item"><span class="wl-calendar__legend-dot wl-calendar__legend-dot--festival"></span>节日</span>
-            </div>
+            ${buildCalendarHtml()}
           </div>
         </div>
 
         <div class="wl-card">
-        <!-- 自动记录 -->
-        <div class="wl-section">
-          <div class="wl-section-header">
-            <span class="wl-section-title"><span style="display:inline-flex;width:14px;height:14px;margin-right:6px;vertical-align:middle;color:var(--text-secondary);">${icons.clock}</span> 自动记录 (已完成任务/子任务)</span>
-            <span class="wl-section-count">${autoRecords.length} 项</span>
-          </div>
-          <div class="wl-list">
-            ${autoRecords.length === 0 ? `
-              <div class="wl-auto-empty">${state.search ? '未找到匹配的日志' : '今日暂无自动记录，任务完成后将自动呈现在这里'}</div>
-            ` : autoRecords.map((r) => `
-              <div class="wl-auto-item">
-                <div class="wl-auto-item__check">${icons.check}</div>
-                <div class="wl-auto-item__body">
-                  <div class="wl-auto-item__text wl-auto-item__text--done">${r.type === 'subtask' ? escapeHtml(r.subtaskName) : escapeHtml(r.taskName)}</div>
-                  ${r.type === 'subtask' ? `<span class="wl-auto-item__sub">子任务 · 所属：${escapeHtml(r.taskName)}</span>` : ''}
-                  ${r._date ? `<span style="font-size:12px;color:var(--text-tertiary);white-space:nowrap;">${r._date}</span>` : ''}
-                </div>
-                <div class="wl-auto-item__indicator"></div>
-              </div>
-            `).join('')}
-          </div>
-        </div>
-
-        <div class="wl-divider"></div>
-
-        <!-- 手动记录 -->
-        <div class="wl-section">
-          <div class="wl-section-header">
-            <span class="wl-section-title"><span style="display:inline-flex;width:14px;height:14px;margin-right:6px;vertical-align:middle;color:var(--text-secondary);">${icons.tasks}</span> 手动记录</span>
-          </div>
-          <div class="wl-list" style="margin-top:12px;">
-            <div class="wl-manual-entries">
-              ${manualEntries.length === 0 ? `
-                <div class="wl-auto-empty">${state.search ? '未找到匹配的日志' : '今日暂无手动记录，点击左上方「添加日志」开始记录'}</div>
-              ` : manualEntries.map((e) => `
-                <div class="wl-manual-entry">
-                  <span class="wl-manual-entry__time">${e.time}</span>
-                  <span class="wl-manual-entry__text">${escapeHtml(e.text)}</span>
-                  ${e._date ? `<span style="font-size:12px;color:var(--text-tertiary);white-space:nowrap;">${e._date}</span>` : ''}
-                  <button class="wl-manual-entry__del" data-id="${e.id}" data-date="${e._date || state.currentDate}" title="删除">${icons.trash}</button>
-                </div>
-              `).join('')}
-            </div>
-          </div>
-        </div>
+          ${buildRecordsHtml()}
         </div>
       </div>
     `;
@@ -204,45 +282,39 @@ export function createWorkLogPage() {
     const backTodayBtn = el.querySelector('#wl-back-today');
     if (backTodayBtn) {
       backTodayBtn.addEventListener('click', () => {
-        state.currentDate = todayStr;
-        state.calYear = todayYear;
-        state.calMonth = todayMonth;
+        const t = new Date();
+        state.currentDate = toISODate(t);
+        state.calYear = t.getFullYear();
+        state.calMonth = t.getMonth() + 1;
         render();
       });
     }
+
+    // 逐日前后导航（后一天不可越过今天）
+    const shiftDay = (dateISO, delta) => {
+      const d = fromISODate(dateISO);
+      d.setDate(d.getDate() + delta);
+      return toISODate(d);
+    };
+    el.querySelector('#wl-day-prev').addEventListener('click', () => {
+      state.currentDate = shiftDay(state.currentDate, -1);
+      syncCalendarMonth();
+      render();
+    });
+    el.querySelector('#wl-day-next').addEventListener('click', () => {
+      if (state.currentDate >= todayStr) return;
+      state.currentDate = shiftDay(state.currentDate, 1);
+      syncCalendarMonth();
+      render();
+    });
 
     // 导出日志
     el.querySelector('#wl-export-btn').addEventListener('click', () => {
       openExportModal();
     });
 
-    // 月历导航
-    el.querySelector('#wl-cal-prev').addEventListener('click', () => {
-      state.calMonth--;
-      if (state.calMonth < 1) {
-        state.calMonth = 12;
-        state.calYear--;
-      }
-      render();
-    });
-    el.querySelector('#wl-cal-next').addEventListener('click', () => {
-      if (isMaxMonth) return;
-      state.calMonth++;
-      if (state.calMonth > 12) {
-        state.calMonth = 1;
-        state.calYear++;
-      }
-      render();
-    });
-
-    // 月历日期点击：切换查看该日期的日志（未来日期禁止点击）
-    el.querySelectorAll('.wl-calendar__cell[data-date]').forEach((cell) => {
-      cell.addEventListener('click', () => {
-        if (cell.dataset.date > todayStr) return;
-        state.currentDate = cell.dataset.date;
-        render();
-      });
-    });
+    // 月历事件
+    bindCalendarEvents();
 
     // 添加日志弹窗
     el.querySelector('#wl-add-log-btn').addEventListener('click', () => {
@@ -255,109 +327,17 @@ export function createWorkLogPage() {
       renderContentOnly();
     });
 
-    // 删除手动日志
-    el.querySelectorAll('.wl-manual-entry__del').forEach((btn) => {
-      btn.addEventListener('click', (ev) => {
-        ev.stopPropagation();
-        const entryId = btn.dataset.id;
-        if (confirm('确认删除此条日志？')) {
-          store.deleteManualEntry(state.currentDate, entryId);
-        }
-      });
-    });
-
     // 移动端开菜单
     el.querySelector('#wl-menu-toggle').addEventListener('click', () => {
       window.dispatchEvent(new CustomEvent('wf-open-sidebar'));
     });
   }
 
-  function renderContentOnly() {
-    const log = store.getWorkLog(state.currentDate);
-    let autoRecords = getAutoRecords(state.currentDate);
-    let manualEntries = log.manualEntries.slice();
-
-    if (state.search) {
-      const q = state.search.toLowerCase();
-      const allDates = getAllDates();
-      autoRecords = [];
-      manualEntries = [];
-      allDates.forEach((date) => {
-        const dateAuto = getAutoRecords(date);
-        dateAuto.forEach((r) => {
-          if (r.text.toLowerCase().includes(q) || (r.taskName && r.taskName.toLowerCase().includes(q))) {
-            autoRecords.push({ ...r, _date: date });
-          }
-        });
-        const dateLog = store.getWorkLog(date);
-        dateLog.manualEntries.forEach((e) => {
-          if (e.text.toLowerCase().includes(q)) {
-            manualEntries.push({ ...e, _date: date });
-          }
-        });
-      });
-    }
-
-    const cards = el.querySelector('.wl-card');
-    cards.innerHTML = `
-      <!-- 自动记录 -->
-      <div class="wl-section">
-        <div class="wl-section-header">
-          <span class="wl-section-title"><span style="display:inline-flex;width:14px;height:14px;margin-right:6px;vertical-align:middle;color:var(--text-secondary);">${icons.clock}</span> 自动记录 (已完成任务/子任务)</span>
-            <span class="wl-section-count">${autoRecords.length} 项</span>
-          </div>
-          <div class="wl-list">
-            ${autoRecords.length === 0 ? `
-              <div class="wl-auto-empty">${state.search ? '未找到匹配的日志' : '今日暂无自动记录，任务完成后将自动呈现在这里'}</div>
-            ` : autoRecords.map((r) => `
-              <div class="wl-auto-item">
-                <div class="wl-auto-item__check">${icons.check}</div>
-                <div class="wl-auto-item__body">
-                  <div class="wl-auto-item__text wl-auto-item__text--done">${r.type === 'subtask' ? escapeHtml(r.subtaskName) : escapeHtml(r.taskName)}</div>
-                  ${r.type === 'subtask' ? `<span class="wl-auto-item__sub">子任务 · 所属：${escapeHtml(r.taskName)}</span>` : ''}
-                  ${r._date ? `<span style="font-size:12px;color:var(--text-tertiary);white-space:nowrap;">${r._date}</span>` : ''}
-                </div>
-                <div class="wl-auto-item__indicator"></div>
-              </div>
-            `).join('')}
-          </div>
-      </div>
-
-      <div class="wl-divider"></div>
-
-      <!-- 手动记录 -->
-      <div class="wl-section">
-        <div class="wl-section-header">
-          <span class="wl-section-title"><span style="display:inline-flex;width:14px;height:14px;margin-right:6px;vertical-align:middle;color:var(--text-secondary);">${icons.tasks}</span> 手动记录</span>
-        </div>
-        <div class="wl-list" style="margin-top:12px;">
-          <div class="wl-manual-entries">
-            ${manualEntries.length === 0 ? `
-              <div class="wl-auto-empty">${state.search ? '未找到匹配的日志' : '今日暂无手动记录，点击左上方「添加日志」开始记录'}</div>
-            ` : manualEntries.map((e) => `
-              <div class="wl-manual-entry">
-                <span class="wl-manual-entry__time">${e.time}</span>
-                <span class="wl-manual-entry__text">${escapeHtml(e.text)}</span>
-                ${e._date ? `<span style="font-size:12px;color:var(--text-tertiary);white-space:nowrap;">${e._date}</span>` : ''}
-                <button class="wl-manual-entry__del" data-id="${e.id}" data-date="${e._date || state.currentDate}" title="删除">${icons.trash}</button>
-              </div>
-            `).join('')}
-          </div>
-        </div>
-      </div>
-    `;
-
-    // 重新绑定删除事件
-    cards.querySelectorAll('.wl-manual-entry__del').forEach((btn) => {
-      btn.addEventListener('click', (ev) => {
-        ev.stopPropagation();
-        const entryId = btn.dataset.id;
-        const entryDate = btn.dataset.date || state.currentDate;
-        if (confirm('确认删除此条日志？')) {
-          store.deleteManualEntry(entryDate, entryId);
-        }
-      });
-    });
+  // 逐日导航后若跨月，月历视图跟随当前日期所在月
+  function syncCalendarMonth() {
+    const d = fromISODate(state.currentDate);
+    state.calYear = d.getFullYear();
+    state.calMonth = d.getMonth() + 1;
   }
 
   function openAddLogModal() {
@@ -373,8 +353,7 @@ export function createWorkLogPage() {
     backdrop.className = 'modal-backdrop';
 
     const modal = document.createElement('div');
-    modal.className = 'ct-modal';
-    modal.style.maxWidth = '400px';
+    modal.className = 'ct-modal ct-modal--log';
 
     const now = new Date();
     const defaultTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
@@ -382,28 +361,29 @@ export function createWorkLogPage() {
     modal.innerHTML = `
       <div class="ct-modal__header">
         <div class="ct-modal__title">添加工作日志</div>
-        <button class="ct-modal__close" id="wl-close-modal">${icons.close}</button>
+        <button class="ct-modal__close" id="wl-close-modal" title="关闭" aria-label="关闭">${icons.close}</button>
       </div>
       <div class="ct-modal__body">
         ${isRetro ? `
-          <div style="font-size:12px;color:var(--text-brand,#4b3fe3);background:rgba(75,63,227,0.06);padding:8px 12px;border-radius:6px;margin-bottom:14px;line-height:1.5;">
+          <div class="wl-retro-hint">
             💡 当前正在为历史日期（${state.currentDate}）补录日志，提交后将自动加注“${retroTagText}”。
           </div>
         ` : ''}
         <div class="ct-field">
-          <label class="ct-label">记录时间 <span style="color:var(--status-error-default)">*</span></label>
+          <label class="ct-label">记录时间 <span class="ct-required">*</span></label>
           <div class="ct-input">
             <input type="time" id="wl-log-time" value="${defaultTime}" />
           </div>
         </div>
         <div class="ct-field">
-          <label class="ct-label">工作内容 <span style="color:var(--status-error-default)">*</span></label>
+          <label class="ct-label" for="wl-log-content">工作内容 <span class="ct-required">*</span></label>
           <div class="ct-input">
             <input type="text" id="wl-log-content" placeholder="记录你完成的工作..." maxlength="100" />
           </div>
+          <div class="ct-field-error" id="wl-content-error"></div>
         </div>
       </div>
-      <div class="ct-modal__footer" style="justify-content: flex-end; gap: 8px;">
+      <div class="ct-modal__footer">
         <button class="ct-btn ct-btn--cancel" id="wl-cancel-modal">取消</button>
         <button class="ct-btn ct-btn--primary" id="wl-submit-modal">添加</button>
       </div>
@@ -413,18 +393,27 @@ export function createWorkLogPage() {
     document.body.appendChild(backdrop);
 
     const close = () => {
+      document.removeEventListener('keydown', onKey);
       backdrop.remove();
     };
+    // Escape 关闭（与其他弹窗行为一致）
+    const onKey = (e) => { if (e.key === 'Escape') close(); };
+    document.addEventListener('keydown', onKey);
 
     modal.querySelector('#wl-close-modal').addEventListener('click', close);
     modal.querySelector('#wl-cancel-modal').addEventListener('click', close);
-    backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+
+    const $content = modal.querySelector('#wl-log-content');
+    const $error = modal.querySelector('#wl-content-error');
+    $content.addEventListener('input', () => { $error.textContent = ''; });
 
     modal.querySelector('#wl-submit-modal').addEventListener('click', () => {
       const time = modal.querySelector('#wl-log-time').value;
-      let text = modal.querySelector('#wl-log-content').value.trim();
+      let text = $content.value.trim();
       if (!text) {
-        modal.querySelector('#wl-log-content').focus();
+        // 行内错误提示，替代静默 focus
+        $error.textContent = '请输入工作内容';
+        $content.focus();
         return;
       }
       if (isRetro && !/（\d{4}年\d{1,2}月\d{1,2}日补录）$/.test(text)) {
@@ -434,7 +423,7 @@ export function createWorkLogPage() {
       close();
     });
 
-    setTimeout(() => modal.querySelector('#wl-log-content').focus(), 100);
+    setTimeout(() => $content.focus(), 100);
   }
 
   function openExportModal() {
@@ -447,26 +436,25 @@ export function createWorkLogPage() {
     backdrop.className = 'modal-backdrop';
 
     const modal = document.createElement('div');
-    modal.className = 'ct-modal';
-    modal.style.maxWidth = '440px';
+    modal.className = 'ct-modal ct-modal--export';
 
     modal.innerHTML = `
       <div class="ct-modal__header">
         <div class="ct-modal__title">导出工作日志</div>
-        <button class="ct-modal__close" id="wl-export-close">${icons.close}</button>
+        <button class="ct-modal__close" id="wl-export-close" title="关闭" aria-label="关闭">${icons.close}</button>
       </div>
       <div class="ct-modal__body">
         <div class="wl-export-hint">选择要导出的时间范围，支持跨多天导出。</div>
         <div class="wl-export-range">
           <div class="ct-field">
-            <label class="ct-label">开始日期 <span style="color:var(--status-error-default)">*</span></label>
+            <label class="ct-label" for="wl-export-start">开始日期 <span class="ct-required">*</span></label>
             <div class="ct-input">
               <input type="date" id="wl-export-start" value="${toISODate(sevenDaysAgo)}" max="${todayISO}" />
             </div>
           </div>
           <div class="ct-export-arrow">→</div>
           <div class="ct-field">
-            <label class="ct-label">结束日期 <span style="color:var(--status-error-default)">*</span></label>
+            <label class="ct-label" for="wl-export-end">结束日期 <span class="ct-required">*</span></label>
             <div class="ct-input">
               <input type="date" id="wl-export-end" value="${todayISO}" max="${todayISO}" />
             </div>
@@ -481,7 +469,7 @@ export function createWorkLogPage() {
         <div class="wl-export-error" id="wl-export-error"></div>
         <div class="wl-export-status" id="wl-export-status"></div>
       </div>
-      <div class="ct-modal__footer" style="justify-content: flex-end; gap: 8px;">
+      <div class="ct-modal__footer">
         <button class="ct-btn ct-btn--cancel" id="wl-export-cancel">取消</button>
         <button class="ct-btn ct-btn--primary" id="wl-export-confirm">
           <span id="wl-export-confirm-text">确认导出</span>
@@ -492,7 +480,14 @@ export function createWorkLogPage() {
     backdrop.appendChild(modal);
     document.body.appendChild(backdrop);
 
-    const close = () => backdrop.remove();
+    const close = () => {
+      document.removeEventListener('keydown', onKey);
+      backdrop.remove();
+    };
+    // Escape 关闭（与其他弹窗行为一致）
+    const onKey = (e) => { if (e.key === 'Escape') close(); };
+    document.addEventListener('keydown', onKey);
+
     const $start = modal.querySelector('#wl-export-start');
     const $end = modal.querySelector('#wl-export-end');
     const $err = modal.querySelector('#wl-export-error');
@@ -502,7 +497,6 @@ export function createWorkLogPage() {
 
     modal.querySelector('#wl-export-close').addEventListener('click', close);
     modal.querySelector('#wl-export-cancel').addEventListener('click', close);
-    backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
 
     // 预设按钮
     modal.querySelectorAll('.wl-export-preset').forEach((btn) => {
@@ -641,15 +635,31 @@ export function createWorkLogPage() {
     }
   }
 
-  // 订阅 store 变化
+  // 订阅 store 变化：右侧卡片与月历同步刷新
+  // （月历的行动日标记依赖任务日志，悬浮窗完成任务后主窗口需即时呈现）
   const unsub = store.subscribe(() => {
     if (el.parentNode) {
       renderContentOnly();
+      renderCalendar();
     }
   });
 
+  // 跨零点自动更新：常驻托盘应用跨天后，「今天」高亮与行动日结算需自动刷新
+  let lastTodayKey = toISODate(new Date());
+  const midnightTimer = setInterval(() => {
+    const key = toISODate(new Date());
+    if (key !== lastTodayKey && el.parentNode) {
+      lastTodayKey = key;
+      const t = new Date();
+      state.currentDate = key;
+      state.calYear = t.getFullYear();
+      state.calMonth = t.getMonth() + 1;
+      render();
+    }
+  }, 30000);
+
   // 监听其他窗口的 localStorage 变化（悬浮窗勾选子任务等）
-  // loadFromStorage 会自动触发订阅者刷新 renderContentOnly，无需在此手动调用
+  // loadFromStorage 会自动触发订阅者刷新 renderContentOnly + renderCalendar，无需在此手动调用
   const onStorage = (e) => {
     if (e.key === 'wf-work-management-v1' && e.newValue) {
       store.loadFromStorage(e.newValue);
@@ -659,6 +669,7 @@ export function createWorkLogPage() {
 
   el._destroy = () => {
     unsub();
+    clearInterval(midnightTimer);
     window.removeEventListener('storage', onStorage);
   };
 

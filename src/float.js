@@ -5,6 +5,7 @@
 
 import { store } from './store.js';
 import { icons } from './utils/icons.js';
+import { confirmDialog, alertDialog } from './utils/dialog.js';
 import { formatShortDate, getTaskDurationInfo } from './utils/date.js';
 
 const PRIORITY_LABEL = { high: '高', mid: '中', low: '低' };
@@ -35,7 +36,7 @@ function render() {
           <span class="float-header__count">${total}</span>
         </div>
         <div class="float-header__actions">
-          <button class="float-header__btn" id="float-close" title="隐藏">${icons.close}</button>
+          <button class="float-header__btn" id="float-close" title="隐藏" aria-label="隐藏">${icons.close}</button>
         </div>
       </div>
       <div class="float-list" id="float-list">
@@ -119,24 +120,35 @@ function bindEvents() {
 
   // 任务勾选框点击：标记完成（已完成/已终止任务不可操作）
   document.querySelectorAll('[data-check]').forEach((check) => {
-    check.addEventListener('click', (e) => {
+    check.addEventListener('click', async (e) => {
       e.stopPropagation();
       const taskId = check.dataset.check;
       const task = store.getTask(taskId);
       if (!task || task.status === 'terminated' || task.status === 'done') return;
       const hasUnfinishedSubtasks = task.subtasks && task.subtasks.some((s) => !s.done);
       if (hasUnfinishedSubtasks) {
-        alert('还有子任务未完成，无法标记完成');
+        // 自定义提示弹窗替代原生 alert
+        await alertDialog({
+          title: '无法标记完成',
+          message: '还有子任务未完成，无法标记完成',
+          confirmText: '知道了',
+        });
         return;
       }
-      if (!confirm('确认将此任务标记为已完成？完成后将不可编辑。')) return;
+      // 自定义确认弹窗替代原生 confirm
+      const ok = await confirmDialog({
+        title: '完成任务',
+        message: '确认将此任务标记为已完成？完成后将不可编辑。',
+        confirmText: '确认完成',
+      });
+      if (!ok) return;
       store.updateTask(taskId, { status: 'done' });
     });
   });
 
   // 子任务勾选框点击：切换子任务完成状态
   document.querySelectorAll('[data-subcheck]').forEach((check) => {
-    check.addEventListener('click', (e) => {
+    check.addEventListener('click', async (e) => {
       e.stopPropagation();
       const [taskId, subtaskId] = check.dataset.subcheck.split(':');
       const task = store.getTask(taskId);
@@ -144,7 +156,13 @@ function bindEvents() {
       const st = task.subtasks.find((s) => s.id === subtaskId);
       if (!st) return;
       if (st.done) return;
-      if (!confirm('确认将此子任务标记为已完成？')) return;
+      // 自定义确认弹窗替代原生 confirm
+      const ok = await confirmDialog({
+        title: '完成子任务',
+        message: '确认将此子任务标记为已完成？',
+        confirmText: '确认完成',
+      });
+      if (!ok) return;
       store.updateSubtask(taskId, subtaskId, { done: true });
     });
   });

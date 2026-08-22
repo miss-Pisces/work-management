@@ -346,6 +346,7 @@ class Store {
     const tasks = this._state.tasks;
     const now = new Date();
     let startDate = null;
+    let endDate = null;
 
     if (range === 'today') {
       startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -361,13 +362,24 @@ class Store {
       startDate = new Date(now.getFullYear(), q * 3, 1);
     } else if (range === 'year') {
       startDate = new Date(now.getFullYear(), 0, 1);
+    } else if (typeof range === 'string') {
+      // 精确日期范围："YYYY-MM-DD"（单日）或 "YYYY-MM-DD:YYYY-MM-DD"（起止段）
+      const m = range.match(/^(\d{4}-\d{2}-\d{2})(?::(\d{4}-\d{2}-\d{2}))?$/);
+      if (m) {
+        const [sy, sm, sd] = m[1].split('-').map(Number);
+        startDate = new Date(sy, sm - 1, sd);
+        const endIso = m[2] || m[1];
+        const [ey, em, ed] = endIso.split('-').map(Number);
+        endDate = new Date(ey, em - 1, ed, 23, 59, 59, 999);
+      }
     }
 
     if (!startDate) return tasks.slice();
 
     const inRange = (isoDate) => {
       const [y, m, d] = isoDate.split('-').map(Number);
-      return new Date(y, m - 1, d) >= startDate;
+      const dt = new Date(y, m - 1, d);
+      return dt >= startDate && (!endDate || dt <= endDate);
     };
     if (basis === 'done') {
       return tasks.filter((t) => t.status === 'done' && inRange(statusDateOf(t)));
@@ -514,8 +526,12 @@ class Store {
   updateSubtask(taskId, subtaskId, patch) {
     const task = this.getTask(taskId);
     if (!task) return;
+    // 已完成/已终止的任务（含其子任务）不可再修改
+    if (task.status === 'done' || task.status === 'terminated') return;
     const st = task.subtasks.find((s) => s.id === subtaskId);
     if (!st) return;
+    // 已终止的子任务不可修改
+    if (st.status === 'terminated' || st.terminated) return;
     const wasDone = st.done;
     const oldName = st.name;
     Object.assign(st, patch);
@@ -538,6 +554,57 @@ class Store {
   }
 
   // ─── 工作日志操作 ──────────────────────────────────────
+  // 月度行动统计：actionDates = 有完成任务/子任务日志的日期集合；
+  // contentDates = 有任何记录（任务日志或手动日志）的日期集合
+  getMonthlyAction(year, month) {
+    const prefix = `${year}-${String(month).padStart(2, '0')}-`;
+    const actionDates = new Set();
+    const contentDates = new Set();
+    this._state.tasks.forEach((t) => {
+      (t.logs || []).forEach((l) => {
+        if (!l.date || !l.date.startsWith(prefix)) return;
+        contentDates.add(l.date);
+        if (l.text === '完成任务' || l.text.startsWith('完成子任务')) {
+          actionDates.add(l.date);
+        }
+      });
+    });
+    Object.keys(this._state.workLogs || {}).forEach((date) => {
+      if (!date.startsWith(prefix)) return;
+      const log = this._state.workLogs[date];
+      if (log && log.manualEntries && log.manualEntries.length > 0) {
+        contentDates.add(date);
+      }
+    });
+    return { actionDates, contentDates };
+  }
+
+  // 本月工作状态统计（工作统计页用）：
+  // 行动天数 = 当月有完成任务日志的天数（含今天，今天完成即计入）
+  // 躺平天数 = 当月截至昨天，既无完成记录也无任何日志内容的天数（今天不定局）
+  getMonthlyActionStats() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1;
+    const { actionDates, contentDates } = this.getMonthlyAction(year, month);
+
+    let actionCount = actionDates.size;
+
+    // 躺平：1 号到昨天中，没有任何内容的日子
+    let idleCount = 0;
+    const today = now.getDate();
+    const yesterdayMs = now.getTime() - 24 * 60 * 60 * 1000;
+    const yesterday = new Date(yesterdayMs);
+    const isSameMonth = yesterday.getFullYear() === year && yesterday.getMonth() + 1 === month;
+    const lastDay = isSameMonth ? yesterday.getDate() : 0;
+    for (let d = 1; d <= lastDay; d++) {
+      const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      if (!contentDates.has(dateStr)) idleCount++;
+    }
+
+    return { year, month, actionCount, idleCount, daysElapsed: today };
+  }
+
   getWorkLog(dateISO) {
     return this._state.workLogs[dateISO] || {
       date: dateISO,
@@ -568,13 +635,6 @@ class Store {
       })(),
       text: text.trim(),
     });
-    this._emit();
-  }
-
-  deleteManualEntry(dateISO, entryId) {
-    const log = this._state.workLogs[dateISO];
-    if (!log) return;
-    log.manualEntries = log.manualEntries.filter((e) => e.id !== entryId);
     this._emit();
   }
 
@@ -649,6 +709,16 @@ class Store {
     const terminated = terminatedSet.length;
     const todo = 0; // 已合并到进行中，不再单独统计
 
+    // 子任务：范围内新建主任务所含子任务的完成情况（与主任务总数同一队列，显示为 12/24）
+    let subtaskTotal = 0;
+    let subtaskDone = 0;
+    createdSet.forEach((t) => {
+      (t.subtasks || []).forEach((s) => {
+        subtaskTotal++;
+        if (s.done) subtaskDone++;
+      });
+    });
+
     // 完成率：全局口径，不随时间范围变化——所有已完成主任务 /（所有主任务 − 已终止）
     // 只统计主任务状态（子任务完成不等于主任务完成），用于呈现整体任务急切度
     const overallTotal = tasks.length;
@@ -700,6 +770,7 @@ class Store {
 
     return {
       total, done, progress, terminated, todo, completionRate, overdue, overdueMaxDays,
+      subtaskTotal, subtaskDone,
       priorityCount,
       dailyDone,
       maxDaily,

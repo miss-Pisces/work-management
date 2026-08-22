@@ -108,6 +108,14 @@
   display: flex;
   align-items: center;
 }
+.wl-section-title__icon {
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+  margin-right: 6px;
+  vertical-align: middle;
+  color: var(--text-secondary);
+}
 .wl-section-count {
   font-size: 11px;
   color: var(--text-tertiary);
@@ -115,6 +123,44 @@
   font-weight: 400;
 }
 .wl-list { min-height: 0; }
+.wl-list--manual { margin-top: 12px; }
+
+/* 搜索结果中的日期标注 */
+.wl-record-date {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+/* 历史日期补录提示 */
+.wl-retro-hint {
+  font-size: 12px;
+  color: var(--text-brand, #4b3fe3);
+  background: rgba(75, 63, 227, 0.06);
+  padding: 8px 12px;
+  border-radius: 6px;
+  margin-bottom: 14px;
+  line-height: 1.5;
+}
+
+/* 逐日前后导航按钮 */
+.wl-day-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border-neutral-l1);
+  border-radius: 6px;
+  background: var(--bg-base-default);
+  color: var(--text-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: border-color 0.15s, color 0.15s;
+}
+.wl-day-nav-btn:hover:not(:disabled) { border-color: var(--bg-brand); color: var(--text-brand); }
+.wl-day-nav-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.wl-day-nav-btn svg { width: 14px; height: 14px; }
 
 .wl-divider {
   height: 1px;
@@ -216,6 +262,9 @@
 .wl-date-nav__chevron svg { width: 14px; height: 14px; }
 
 .wl-export-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   height: 30px;
   padding: 0 14px;
   font-size: 13px;
@@ -229,6 +278,12 @@
   transition: border-color 0.15s, color 0.15s;
 }
 .wl-export-btn:hover { border-color: var(--bg-brand); color: var(--text-brand); }
+.wl-export-btn__icon {
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+  color: var(--text-secondary);
+}
 
 /* Log Content Card */
 .wl-card {
@@ -368,20 +423,6 @@
   color: var(--text-secondary);
   word-break: break-word;
 }
-.wl-manual-entry__del {
-  border: none;
-  background: transparent;
-  color: var(--text-tertiary);
-  cursor: pointer;
-  padding: 0;
-  display: inline-flex;
-  opacity: 0;
-  transition: opacity 0.12s, color 0.12s;
-}
-.wl-manual-entry:hover .wl-manual-entry__del { opacity: 1; }
-.wl-manual-entry__del:hover { color: var(--status-error-default); }
-.wl-manual-entry__del svg { width: 14px; height: 14px; }
-
 /* Add manual entry row */
 .wl-add-manual {
   display: flex;
@@ -578,6 +619,14 @@
   cursor: not-allowed;
   pointer-events: none;
 }
+/* 行动日：当天有完成任务/子任务，浅绿底（今天不标记、未来不标记） */
+.wl-calendar__cell.is-action {
+  background: rgba(140, 194, 105, 0.26);
+}
+.wl-calendar__cell.is-action .wl-calendar__day {
+  color: #3f7a2a;
+  font-weight: 700;
+}
 .wl-calendar__cell.is-today {
   background: rgba(75, 63, 227, 0.08);
 }
@@ -650,6 +699,14 @@
 }
 .wl-calendar__legend-dot--festival {
   background: var(--status-error-default);
+}
+.wl-calendar__legend-dot--action {
+  background: rgba(140, 194, 105, 0.4);
+  border: 1px solid var(--viz-action-day);
+}
+.wl-calendar__legend-dot--idle {
+  background: transparent;
+  border: 1px dashed var(--text-tertiary);
 }
 
 /* ===== Export Modal ===== */

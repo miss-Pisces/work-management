@@ -86,19 +86,27 @@ export function createTasksPage() {
     const FILTER_LABELS = { all: '全部任务', done: '已完成任务', overdue: '逾期任务', terminated: '已终止任务' };
     const RANGE_LABELS = { today: '今日', week: '本周', month: '本月', quarter: '本季度', year: '本年', all: '全部时间' };
 
+    // 日期串范围（"YYYY-MM-DD" 单日 / "YYYY-MM-DD:YYYY-MM-DD" 起止段）转为中文标签
+    const dateRangeLabel = (r) => {
+      const m = r && r.match(/^(\d{4}-\d{2}-\d{2})(?::(\d{4}-\d{2}-\d{2}))?$/);
+      if (!m) return '';
+      return m[2] ? `${formatShortDate(m[1])}–${formatShortDate(m[2])}` : formatShortDate(m[1]);
+    };
+
     const showFilterBanner = urlFilter && !state.search;
     const filterLabel = FILTER_LABELS[urlFilter] || '任务';
-    const rangeLabel = urlRange && urlFilter !== 'overdue' ? (RANGE_LABELS[urlRange] || '') + ' · ' : '';
+    const rangeText = RANGE_LABELS[urlRange] || dateRangeLabel(urlRange);
+    const rangeLabel = urlRange && urlFilter !== 'overdue' ? rangeText + ' · ' : '';
 
     el.innerHTML = `
       <div class="wf-page-header">
-        <button class="wf-menu-toggle-btn" id="wf-menu-toggle">${icons.menu}</button>
+        <button class="wf-menu-toggle-btn" id="wf-menu-toggle" aria-label="打开菜单">${icons.menu}</button>
         <button class="wf-btn wf-btn--primary" id="wf-create-task-btn">
-          <span style="font-size:16px;line-height:1;margin-right:2px;">+</span> 新建任务
+          <span class="wf-btn__lead-icon">${icons.plus}</span> 新建任务
         </button>
         <div class="wf-search-wrapper">
           <span class="wf-search-icon">${icons.search}</span>
-          <input type="text" class="wf-search-input" id="wf-task-search" placeholder="搜索任务..." />
+          <input type="text" class="wf-search-input" id="wf-task-search" placeholder="搜索任务..." aria-label="搜索任务" />
         </div>
       </div>
       ${showFilterBanner ? `
@@ -109,7 +117,7 @@ export function createTasksPage() {
       ` : ''}
       <div class="wf-filter-bar">
         <div class="wf-filter-select">
-          <select id="wf-sort-select">
+          <select id="wf-sort-select" aria-label="排序方式">
             <option value="createdAt">按创建时间</option>
             <option value="deadline">按截止时间</option>
             <option value="priority">按优先级</option>
@@ -166,7 +174,16 @@ export function createTasksPage() {
     const list = getFiltered();
     const wrap = el.querySelector('#wf-table-wrap');
     if (list.length === 0) {
-      wrap.innerHTML = `
+      // 区分两种空态：搜索/筛选无匹配 vs 尚未创建任何任务
+      const urlFilter = new URLSearchParams(window.location.hash.split('?')[1]).get('filter');
+      const hasQuery = !!(state.search || urlFilter);
+      wrap.innerHTML = hasQuery ? `
+        <div class="wf-empty">
+          <div class="wf-empty__icon">${icons.search}</div>
+          <div class="wf-empty__title">未找到匹配的任务</div>
+          <div class="wf-empty__desc">试试更换关键词${urlFilter ? '或清除筛选条件' : ''}</div>
+        </div>
+      ` : `
         <div class="wf-empty">
           <div class="wf-empty__icon">${icons.tasks}</div>
           <div class="wf-empty__title">暂无任务</div>
@@ -245,7 +262,7 @@ export function createTasksPage() {
             <span class="wf-subtask-count" data-action="edit">${subtaskDone}/${subtaskTotal}</span>
           </td>
           <td class="col-actions">
-            <button class="wf-action-btn" data-action="edit" title="编辑">
+            <button class="wf-action-btn" data-action="edit" title="编辑" aria-label="编辑任务">
               ${icons.edit}
             </button>
           </td>

@@ -46,6 +46,8 @@ export const icons = {
   calendar: wrap('<rect x="2" y="3" width="12" height="11" rx="2" stroke="currentColor" stroke-width="1.3"/><path d="M2 7H14" stroke="currentColor" stroke-width="1.3"/><path d="M5 1V4M11 1V4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>'),
   warning: wrap('<path d="M8 2.4L14.5 13.2H1.5L8 2.4Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M8 6.5V9.3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="8" cy="11.3" r="0.75" fill="currentColor"/>'),
   checkCircle: wrap('<circle cx="8" cy="8" r="6.2" stroke="currentColor" stroke-width="1.4"/><path d="M5.3 8.2L7.1 10L10.7 6.3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>'),
+  // target (bullseye)
+  target: wrap('<circle cx="8" cy="8" r="6.2" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8" r="3.2" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8" r="0.8" fill="currentColor"/>'),
   // menu (hamburger)
   menu: wrap('<path d="M2 4H14M2 8H14M2 12H14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>'),
   // export / download

@@ -414,6 +414,7 @@ tr.is-done .wf-task-name__text,
   color: var(--text-tertiary);
   text-align: center;
 }
+
 .wf-empty__icon {
   width: 48px;
   height: 48px;
