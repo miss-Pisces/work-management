@@ -81,7 +81,7 @@ Electron 23+ 已不再支持 Windows 7。如需构建 Win7 兼容安装包，请
    ```
 2. 修改 `version` 字段以避免与主分支安装包重名：
    ```json
-   "version": "1.0.1-win7"
+   "version": "1.0.2-win7"
    ```
 3. 重新安装依赖并打包：
    ```bash
@@ -89,7 +89,7 @@ Electron 23+ 已不再支持 Windows 7。如需构建 Win7 兼容安装包，请
    npm run electron:build
    ```
 
-打包产物 `WorkManagement-Setup-1.0.1-win7.exe` 将生成在 `release/` 目录下。已构建的 Win7 安装包可在 [Releases](https://github.com/MissPisces/work-management/releases/tag/v1.0.1) 页面直接下载，无需自行编译。
+打包产物 `WorkManagement-Setup-1.0.2-win7.exe` 将生成在 `release/` 目录下。已构建的 Win7 安装包可在 [Releases](https://github.com/MissPisces/work-management/releases/tag/v1.0.2) 页面直接下载，无需自行编译。
 
 ## 协议
 
@@ -101,6 +101,7 @@ Copyright (c) 2026 work-management contributors
 
 | 版本 | 日期 | 说明 |
 |------|------|------|
+| [v1.0.2](https://github.com/MissPisces/work-management/releases/tag/v1.0.2) | 2026-08-22 | UI 无障碍与交互整改；统计页主任务口径明确并新增子任务统计卡 |
 | [v1.0.1](https://github.com/MissPisces/work-management/releases/tag/v1.0.1) | 2026-08-11 | Bug 修复版本：完成率显示、操作记录溢出、悬浮窗置顶与渲染等 7 项修复 |
 | [v1.0.0](https://github.com/MissPisces/work-management/releases/tag/v1.0.0) | 2026-08-09 | 首个正式版本 |
 

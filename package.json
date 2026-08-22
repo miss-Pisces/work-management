@@ -1,7 +1,7 @@
 {
   "name": "work-management",
   "private": true,
-  "version": "1.0.1",
+  "version": "1.0.2",
   "type": "module",
   "description": "工作管理桌面应用 - 提升效率，管理日常",
   "author": "work-management contributors",
