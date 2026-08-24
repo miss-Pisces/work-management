@@ -344,7 +344,7 @@ export function createStatsPage() {
             </div>
           </div>
         </div>
-        <div class="stats-overdue-card is-action" title="工作 = 当月有完成主任务或子任务的天数（含今天）；躺平 = 当月截至昨日无任何记录的天数；不随时间范围变化">
+        <div class="stats-overdue-card is-action" title="工作 = 当月有产出（完成任务/子任务或手动记录）的天数（含今天）；躺平 = 当月截至昨日无任何记录的天数；不随时间范围变化">
           <span class="stats-overdue-card__header">
             <span class="stats-overdue-card__icon">${icons.checkCircle}</span>
             <span class="stats-overdue-card__label">本月工作状态</span>

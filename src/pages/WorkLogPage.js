@@ -162,10 +162,10 @@ export function createWorkLogPage() {
       <div class="wl-calendar__grid" id="wl-cal-grid">
         ${getMonthCalendar(state.calYear, state.calMonth).map((cell) => {
           const isFuture = cell.date > todayStr;
-          // 行动日：当天有完成任务/子任务日志；今天不标记（还没过完，次日结算）
+          // 行动日：当天有产出（完成任务/子任务或手动记录）；今天不标记（还没过完，次日结算）
           const isAction = !cell.isToday && !isFuture && actionDates.has(cell.date);
           return `
-            <div class="wl-calendar__cell ${cell.isToday ? 'is-today' : ''} ${cell.date === state.currentDate ? 'is-selected' : ''} ${cell.isCurrentMonth ? '' : 'is-out'} ${cell.festival ? 'is-festival' : ''} ${isFuture ? 'is-future' : ''} ${isAction ? 'is-action' : ''}" data-date="${cell.date}" role="button" tabindex="-1" aria-label="${cell.date}${cell.isToday ? '，今天' : ''}${isAction ? '，行动日' : ''}" ${isAction ? 'title="行动日：当天有完成任务"' : ''}>
+            <div class="wl-calendar__cell ${cell.isToday ? 'is-today' : ''} ${cell.date === state.currentDate ? 'is-selected' : ''} ${cell.isCurrentMonth ? '' : 'is-out'} ${cell.festival ? 'is-festival' : ''} ${isFuture ? 'is-future' : ''} ${isAction ? 'is-action' : ''}" data-date="${cell.date}" role="button" tabindex="-1" aria-label="${cell.date}${cell.isToday ? '，今天' : ''}${isAction ? '，行动日' : ''}" ${isAction ? 'title="行动日：当天有完成任务或工作记录"' : ''}>
               <span class="wl-calendar__day">${cell.day}</span>
               <span class="wl-calendar__lunar">${cell.lunarShort}</span>
             </div>

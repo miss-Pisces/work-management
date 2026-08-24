@@ -554,7 +554,7 @@ class Store {
   }
 
   // ─── 工作日志操作 ──────────────────────────────────────
-  // 月度行动统计：actionDates = 有完成任务/子任务日志的日期集合；
+  // 月度行动统计：actionDates = 有产出（完成任务/子任务日志或手动记录）的日期集合；
   // contentDates = 有任何记录（任务日志或手动日志）的日期集合
   getMonthlyAction(year, month) {
     const prefix = `${year}-${String(month).padStart(2, '0')}-`;
@@ -574,13 +574,15 @@ class Store {
       const log = this._state.workLogs[date];
       if (log && log.manualEntries && log.manualEntries.length > 0) {
         contentDates.add(date);
+        // 手动记录（含补录）也是当天有产出的证据，计入行动日
+        actionDates.add(date);
       }
     });
     return { actionDates, contentDates };
   }
 
   // 本月工作状态统计（工作统计页用）：
-  // 行动天数 = 当月有完成任务日志的天数（含今天，今天完成即计入）
+  // 行动天数 = 当月有产出（完成任务/子任务或手动记录）的天数（含今天，今天完成即计入）
   // 躺平天数 = 当月截至昨天，既无完成记录也无任何日志内容的天数（今天不定局）
   getMonthlyActionStats() {
     const now = new Date();
